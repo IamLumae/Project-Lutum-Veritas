@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Lutum Veritas",
+  "version": "1.1.0",
+  "identifier": "com.lutum.veritas",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Lutum Veritas",
+        "width": 900,
+        "height": 700,
+        "minWidth": 600,
+        "minHeight": 400,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "wix": null,
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "nsis-hooks.nsh"
+      }
+    }
+  }
+}

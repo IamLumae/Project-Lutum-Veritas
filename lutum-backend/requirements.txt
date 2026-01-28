@@ -1,0 +1,28 @@
+# Lutum Veritas Backend Dependencies
+# ====================================
+# ALLE Dependencies hier - wird beim Start automatisch geprüft!
+
+# Web Framework
+fastapi>=0.115.0
+uvicorn>=0.32.0
+sse-starlette>=2.0.0
+
+# HTTP Client (für LLM API)
+requests>=2.32.0
+
+# Validation
+pydantic>=2.9.0
+
+# Camoufox Scraper (Browser-Automation)
+camoufox[geoip]>=0.4.0
+
+# Content Extraction (Text aus HTML)
+trafilatura>=2.0.0
+
+# HTML Parsing
+lxml>=5.0.0
+beautifulsoup4>=4.12.0
+
+# Search Engines (kein Browser nötig!)
+ddgs>=7.0.0
+search-engines-scraper-tasos>=0.6.0

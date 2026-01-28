@@ -1,0 +1,76 @@
+# ================================
+# Lutum Veritas - .gitignore
+# ================================
+
+# ---------- Build Outputs ----------
+dist/
+build/
+output/
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+
+# ---------- Tauri / Rust ----------
+lutum-desktop/src-tauri/target/
+lutum-desktop/src-tauri/Cargo.lock
+*.pdb
+
+# ---------- Node / Frontend ----------
+node_modules/
+lutum-desktop/dist/
+*.tsbuildinfo
+.vite/
+
+# ---------- Python / Backend ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.eggs/
+*.whl
+venv/
+.venv/
+env/
+.env
+*.log
+
+# PyInstaller
+*.spec
+*.manifest
+
+# ---------- Research Data ----------
+final_synthesis_backups/
+scraped_data/
+*.jsonl
+SESSION_RECOVERED.json
+FINAL_SYNTHESIS_RECOVERED.md
+
+# ---------- IDE / Editor ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---------- Secrets / Config ----------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# ---------- Misc ----------
+*.bak
+*.tmp
+*.temp
+.cache/

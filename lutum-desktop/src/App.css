@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+/* Dark Mode default */
+:root {
+  color-scheme: dark;
+}
+
+/* Light Mode Override */
+:root:not(.dark) {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f3f4f6;
+  --bg-tertiary: #e5e7eb;
+  --bg-hover: #d1d5db;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --border: #d1d5db;
+  --accent: #3b82f6;
+}
+
+.dark {
+  --bg-primary: #18181b;
+  --bg-secondary: #27272a;
+  --bg-tertiary: #3f3f46;
+  --bg-hover: #52525b;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --border: #3f3f46;
+  --accent: #60a5fa;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
