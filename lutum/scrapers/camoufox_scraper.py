@@ -8,6 +8,11 @@ Camoufox = Firefox with C++-level fingerprint spoofing.
 83.3% bypass rate on anti-bot systems (Cloudflare, Datadome, Akamai).
 
 ACHTUNG: Braucht camoufox: pip install camoufox[geoip] && python -m camoufox fetch
+
+Security:
+- All URLs are validated before scraping (SSRF protection)
+- Private IPs and internal hostnames are blocked
+- Response size limits prevent memory exhaustion
 """
 
 import asyncio
@@ -15,6 +20,12 @@ from typing import Optional, Tuple
 
 from lutum.scrapers.base import BaseScraper
 from lutum.core.config import ScraperConfig
+from lutum.core.security import validate_url, validate_urls, sanitize_error
+
+# Security limits
+MAX_URLS_PER_BATCH = 100
+MAX_RESPONSE_SIZE = 10_000_000  # 10MB
+MIN_RATE_LIMIT_DELAY = 0.5  # 500ms between requests
 
 
 class CamoufoxScraper(BaseScraper):
@@ -62,9 +73,16 @@ class CamoufoxScraper(BaseScraper):
         """
         Async implementation - opens URL with Camoufox, returns HTML.
 
+        Security: URL is validated before scraping (SSRF protection).
+
         Returns:
             Tuple (html, error_message)
         """
+        # Security: Validate URL before scraping
+        if not validate_url(url):
+            self.logger.warning(f"Blocked unsafe URL: {url[:100]}")
+            return (None, f"URL blocked for security reasons: {url[:50]}...")
+
         if not self._ensure_camoufox():
             return (None, "camoufox not installed")
 
@@ -126,9 +144,16 @@ class CamoufoxScraper(BaseScraper):
 
         Use this when you want exactly what a human sees, no processing.
 
+        Security: URL is validated before scraping (SSRF protection).
+
         Returns:
             Visible text or None
         """
+        # Security: Validate URL before scraping
+        if not validate_url(url):
+            self.logger.warning(f"Blocked unsafe URL: {url[:100]}")
+            return None
+
         if not self._ensure_camoufox():
             return None
 
@@ -218,8 +243,13 @@ async def scrape_urls_batch(urls: list[str], timeout: int = 15, max_concurrent: 
     Parallelität mit einem Browser funktioniert nicht zuverlässig,
     daher sequenziell mit 15s Timeout pro URL.
 
+    Security:
+    - All URLs are validated before scraping (SSRF protection)
+    - Maximum 100 URLs per batch
+    - Rate limiting between requests
+
     Args:
-        urls: List of URLs to scrape
+        urls: List of URLs to scrape (max 100)
         timeout: Timeout per URL in seconds (default 15 - short!)
         max_concurrent: Ignored (kept for API compatibility)
 
@@ -233,6 +263,21 @@ async def scrape_urls_batch(urls: list[str], timeout: int = 15, max_concurrent: 
     if not urls:
         return {}
 
+    # Security: Limit number of URLs
+    if len(urls) > MAX_URLS_PER_BATCH:
+        logger.warning(f"URL list truncated: {len(urls)} -> {MAX_URLS_PER_BATCH}")
+        urls = urls[:MAX_URLS_PER_BATCH]
+
+    # Security: Validate all URLs and filter out unsafe ones
+    safe_urls = validate_urls(urls)
+    blocked_count = len(urls) - len(safe_urls)
+    if blocked_count > 0:
+        logger.warning(f"Blocked {blocked_count} unsafe URLs (SSRF protection)")
+
+    if not safe_urls:
+        logger.warning("No safe URLs to scrape after validation")
+        return {}
+
     try:
         from camoufox.async_api import AsyncCamoufox
     except ImportError:
@@ -240,45 +285,69 @@ async def scrape_urls_batch(urls: list[str], timeout: int = 15, max_concurrent: 
         return {}
 
     results = {}
-    total = len(urls)
+    total = len(safe_urls)
 
+    browser = None
     try:
-        async with AsyncCamoufox(headless=True) as browser:
-            logger.info(f"Scraping {total} URLs (sequential, {timeout}s timeout each)...")
+        browser = await AsyncCamoufox(headless=True).start()
+        logger.info(f"Scraping {total} URLs (sequential, {timeout}s timeout each)...")
 
-            page = await browser.new_page()
+        page = await browser.new_page()
+        last_request_time = 0.0
 
-            for i, url in enumerate(urls, 1):
-                start = time.time()
-                logger.info(f"  [{i}/{total}] Scraping: {url[:60]}...")
+        for i, url in enumerate(safe_urls, 1):
+            # Security: Rate limiting
+            elapsed = time.time() - last_request_time
+            if elapsed < MIN_RATE_LIMIT_DELAY:
+                await asyncio.sleep(MIN_RATE_LIMIT_DELAY - elapsed)
 
-                try:
-                    await page.goto(
-                        url,
-                        wait_until="domcontentloaded",
-                        timeout=timeout * 1000
-                    )
+            last_request_time = time.time()
+            start = time.time()
+            logger.info(f"  [{i}/{total}] Scraping: {url[:60]}...")
 
-                    # Minimal wait for JS
-                    await asyncio.sleep(1.0)
+            try:
+                await page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=timeout * 1000
+                )
 
-                    # Text extrahieren
-                    text = await page.evaluate("document.body?.innerText || ''")
+                # Minimal wait for JS
+                await asyncio.sleep(1.0)
 
-                    if text and len(text.strip()) > 50:
-                        results[url] = text
-                        logger.info(f"  [{i}/{total}] OK: {len(text)} chars in {time.time() - start:.1f}s")
-                    else:
-                        logger.warning(f"  [{i}/{total}] EMPTY in {time.time() - start:.1f}s")
+                # Text extrahieren
+                text = await page.evaluate("document.body?.innerText || ''")
 
-                except Exception as e:
-                    logger.warning(f"  [{i}/{total}] FAILED in {time.time() - start:.1f}s: {str(e)[:50]}")
+                if text and len(text.strip()) > 50:
+                    # Security: Limit response size
+                    if len(text) > MAX_RESPONSE_SIZE:
+                        text = text[:MAX_RESPONSE_SIZE] + "\n[...TRUNCATED - exceeded size limit...]"
+                        logger.warning(f"  [{i}/{total}] Response truncated to {MAX_RESPONSE_SIZE} bytes")
 
-            await page.close()
+                    results[url] = text
+                    logger.info(f"  [{i}/{total}] OK: {len(text)} chars in {time.time() - start:.1f}s")
+                else:
+                    logger.warning(f"  [{i}/{total}] EMPTY in {time.time() - start:.1f}s")
 
-        logger.info(f"Scraping complete: {len(results)}/{total} successful")
+            except Exception as e:
+                # Security: Sanitize error message
+                safe_error = sanitize_error(e)
+                logger.warning(f"  [{i}/{total}] FAILED in {time.time() - start:.1f}s: {safe_error[:50]}")
+
+        logger.info(f"Scraping done, closing browser...")
 
     except Exception as e:
         logger.error(f"Scrape failed: {e}")
+
+    finally:
+        # Browser mit Timeout schließen - NICHT blockieren!
+        if browser:
+            try:
+                await asyncio.wait_for(browser.close(), timeout=10.0)
+                logger.info(f"Browser closed, {len(results)}/{total} successful")
+            except asyncio.TimeoutError:
+                logger.warning(f"Browser close timed out, returning {len(results)} results anyway")
+            except Exception as e:
+                logger.warning(f"Browser close failed: {e}, returning {len(results)} results anyway")
 
     return results

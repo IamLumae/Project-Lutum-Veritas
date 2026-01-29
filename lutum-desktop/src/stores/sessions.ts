@@ -13,9 +13,11 @@ export interface Message {
   timestamp: string; // ISO string für JSON serialization
   url?: string;
   /** Spezial-Typ für verschiedene Anzeigen */
-  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting";
+  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry";
   /** URLs für sources-Typ (aufklappbare Quellen-Box) */
   sources?: string[];
+  /** Source Registry für klickbare Citations {1: "url1", 2: "url2"} */
+  sourceRegistry?: Record<number, string>;
   /** Punkt-Titel für point_summary-Typ */
   pointTitle?: string;
   /** Punkt-Nummer für point_summary-Typ */
@@ -49,6 +51,8 @@ export interface ContextState {
   plan_version: number;
   session_title: string;
   current_step: number;
+  /** Academic Mode: Hierarchische Bereiche mit Unterpunkten */
+  academic_bereiche?: Record<string, string[]>;
 }
 
 export interface Session {

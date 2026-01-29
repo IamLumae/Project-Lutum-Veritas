@@ -7,6 +7,8 @@
 
 const STORAGE_KEY = "lutum-settings";
 
+import type { Language } from '../i18n/translations';
+
 export interface Settings {
   apiKey: string;
   darkMode: boolean;
@@ -14,6 +16,7 @@ export interface Settings {
   academicMode: boolean;
   workModel: string;   // Modell für Vorarbeit (Think, Pick URLs, Dossier)
   finalModel: string;  // Modell für Final Synthesis
+  language: Language;  // UI + Prompt Sprache
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -21,8 +24,9 @@ const DEFAULT_SETTINGS: Settings = {
   darkMode: true,
   modelSize: 'small',
   academicMode: false,
-  workModel: "google/gemini-2.5-flash-preview-05-20",
-  finalModel: "anthropic/claude-sonnet-4",
+  workModel: "google/gemini-2.5-flash-lite-preview-09-2025",
+  finalModel: "qwen/qwen3-vl-235b-a22b-instruct",
+  language: 'de',
 };
 
 /**

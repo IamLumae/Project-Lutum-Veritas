@@ -204,7 +204,7 @@ async def _close_google_session():
 
 
 # === CONFIG ===
-MODEL = "google/gemini-3-flash-preview"
+MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 
 def _format_results_for_llm(search_results: dict[str, list[dict]]) -> str:

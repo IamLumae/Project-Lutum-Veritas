@@ -21,7 +21,7 @@ from lutum.core.api_config import get_api_key
 
 
 # === CONFIG ===
-MODEL = "google/gemini-3-flash-preview"
+MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs"
 
 # Logger für dieses Modul

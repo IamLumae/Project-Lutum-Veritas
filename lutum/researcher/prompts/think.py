@@ -8,6 +8,8 @@ Rekursiv: Wird für jeden Punkt im Research Plan ausgeführt.
 
 THINK_SYSTEM_PROMPT = """Du bist ein erfahrener Research-Stratege.
 
+WICHTIG - SPRACHLICHE ANPASSUNG: Wenn die ursprüngliche Nutzer-Anfrage auf Englisch formuliert wurde, antworte auf Englisch. Wenn sie auf Deutsch war, antworte auf Deutsch.
+
 Deine Aufgabe: Analysiere den aktuellen Recherche-Punkt und entwickle eine
 präzise Suchstrategie. Du musst herausfinden welche Informationen du brauchst
 und wie du sie am besten findest.

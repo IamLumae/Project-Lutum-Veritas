@@ -13,10 +13,20 @@ Usage:
 """
 
 import sys
+import os
 import subprocess
 import socket
 from pathlib import Path
 from contextlib import asynccontextmanager
+
+# PyInstaller frozen check
+FROZEN = getattr(sys, 'frozen', False)
+
+# Fix für windowed apps: stdout/stderr müssen existieren für uvicorn logging
+if FROZEN and sys.stdout is None:
+    # Redirect to devnull wenn kein Console
+    sys.stdout = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w')
 
 
 # === ZOMBIE KILLER ===
@@ -70,80 +80,84 @@ def kill_zombie_on_port(port: int = 8420):
 kill_zombie_on_port(8420)
 
 
-# === AUTO-INSTALL DEPENDENCIES ===
-# Package-Name → Import-Name Mapping (wenn unterschiedlich)
-IMPORT_NAMES = {
-    "beautifulsoup4": "bs4",
-    "sse-starlette": "sse_starlette",
-    "camoufox": "camoufox",
-    "search-engines-scraper-tasos": "search_engines",
-    "ddgs": "ddgs",
-}
+# === AUTO-INSTALL DEPENDENCIES (nur wenn NICHT frozen) ===
+if not FROZEN:
+    IMPORT_NAMES = {
+        "beautifulsoup4": "bs4",
+        "sse-starlette": "sse_starlette",
+        "camoufox": "camoufox",
+        "search-engines-scraper-tasos": "search_engines",
+        "ddgs": "ddgs",
+    }
+
+    def ensure_dependencies():
+        """Installiert fehlende Dependencies automatisch beim Start."""
+        requirements_file = Path(__file__).parent / "requirements.txt"
+
+        if not requirements_file.exists():
+            print("[WARN] requirements.txt nicht gefunden!")
+            return
+
+        # Lese required packages
+        required = []
+        for line in requirements_file.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                pkg = line.split(">=")[0].split("==")[0].split("[")[0].strip()
+                required.append((pkg, line))
+
+        # Prüfe welche fehlen
+        missing = []
+        for pkg, full_spec in required:
+            import_name = IMPORT_NAMES.get(pkg, pkg.replace("-", "_"))
+            try:
+                __import__(import_name)
+            except ImportError:
+                missing.append(full_spec)
+
+        if missing:
+            print(f"[INFO] Installiere {len(missing)} fehlende Dependencies...")
+            for pkg in missing:
+                print(f"  → {pkg}")
+
+            try:
+                subprocess.check_call([
+                    sys.executable, "-m", "pip", "install",
+                    "-q", "--user", *missing
+                ])
+                print("[OK] Dependencies installiert!")
+
+                if any("camoufox" in m for m in missing):
+                    print("[INFO] Lade Camoufox Browser herunter...")
+                    subprocess.check_call([sys.executable, "-m", "camoufox", "fetch"])
+                    print("[OK] Camoufox Browser ready!")
+
+                print("[INFO] Dependencies installiert - bitte Backend neu starten!")
+                print("[INFO] Drücke Enter und starte dann erneut.")
+                input()
+                sys.exit(0)
+
+            except subprocess.CalledProcessError as e:
+                print(f"[ERROR] pip install failed: {e}")
+                print("[WARN] Bitte manuell ausführen: pip install -r requirements.txt")
+
+    ensure_dependencies()
+else:
+    print("[INFO] Running as frozen executable - skipping dependency check")
 
 
-def ensure_dependencies():
-    """Installiert fehlende Dependencies automatisch beim Start."""
-    requirements_file = Path(__file__).parent / "requirements.txt"
-
-    if not requirements_file.exists():
-        print("[WARN] requirements.txt nicht gefunden!")
-        return
-
-    # Lese required packages
-    required = []
-    for line in requirements_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            # Package name extrahieren (ohne version specifier)
-            pkg = line.split(">=")[0].split("==")[0].split("[")[0].strip()
-            required.append((pkg, line))
-
-    # Prüfe welche fehlen
-    missing = []
-    for pkg, full_spec in required:
-        import_name = IMPORT_NAMES.get(pkg, pkg.replace("-", "_"))
-        try:
-            __import__(import_name)
-        except ImportError:
-            missing.append(full_spec)
-
-    if missing:
-        print(f"[INFO] Installiere {len(missing)} fehlende Dependencies...")
-        for pkg in missing:
-            print(f"  → {pkg}")
-
-        try:
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install",
-                "-q", "--user", *missing
-            ])
-            print("[OK] Dependencies installiert!")
-
-            # Camoufox braucht Browser-Download nach Install
-            if any("camoufox" in m for m in missing):
-                print("[INFO] Lade Camoufox Browser herunter...")
-                subprocess.check_call([sys.executable, "-m", "camoufox", "fetch"])
-                print("[OK] Camoufox Browser ready!")
-
-            # Nach Installation: User muss manuell neustarten
-            print("[INFO] Dependencies installiert - bitte Backend neu starten!")
-            print("[INFO] Drücke Enter und starte dann erneut.")
-            input()
-            sys.exit(0)
-
-        except subprocess.CalledProcessError as e:
-            print(f"[ERROR] pip install failed: {e}")
-            print("[WARN] Bitte manuell ausführen: pip install -r requirements.txt")
-
-# Beim Import ausführen
-ensure_dependencies()
-
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
-# Füge lutum zum Path hinzu - .resolve() für absolute Pfade
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Pfad-Setup: unterschiedlich für frozen vs development
+if FROZEN:
+    # PyInstaller: _MEIPASS enthält entpackte Daten
+    BASE_PATH = Path(sys._MEIPASS)
+    sys.path.insert(0, str(BASE_PATH))
+else:
+    # Development: Parent-Ordner für lutum
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lutum.core.log_config import get_logger
 from routes.chat import router as chat_router
@@ -169,12 +183,32 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS für Frontend
+# === SECURITY HEADERS MIDDLEWARE ===
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        # Prevent MIME-type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+        # Enable XSS filter
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        # Prevent caching of sensitive data
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# CORS für Frontend - Lokale App, daher permissiv
+# Tauri apps use tauri://localhost origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Tauri App
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],  # Lokale App - kein externer Zugriff möglich
+    allow_credentials=False,
+    allow_methods=["*"],  # GET, POST, OPTIONS etc.
     allow_headers=["*"],
 )
 

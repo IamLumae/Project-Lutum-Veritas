@@ -4,7 +4,14 @@ Pick URLs Prompt (Prompt 3)
 LLM wählt die relevantesten URLs aus den Suchergebnissen.
 
 Rekursiv: Wird für jeden Punkt im Research Plan ausgeführt.
+
+Security:
+- All parsed URLs are validated (SSRF protection)
+- Input lengths are limited
+- Response parsing has bounds
 """
+
+from lutum.core.security import validate_url, sanitize_user_input, MAX_URL_LENGTH
 
 PICK_URLS_SYSTEM_PROMPT = """Du wählst URLs aus Suchergebnissen.
 
@@ -145,12 +152,21 @@ def parse_pick_urls_response(response: str) -> list[str]:
     """
     Parst die Pick-URLs-Response (nur URLs).
 
+    Security:
+    - Response length is limited
+    - URLs are validated (SSRF protection)
+    - URL length is limited
+
     Args:
         response: LLM Response
 
     Returns:
-        Liste der URLs
+        Liste der URLs (only safe URLs)
     """
+    # Security: Limit response length
+    if len(response) > 100_000:
+        response = response[:100_000]
+
     urls = []
 
     for line in response.strip().split("\n"):
@@ -158,7 +174,13 @@ def parse_pick_urls_response(response: str) -> list[str]:
         if line.lower().startswith("url"):
             if ":" in line:
                 url = line.split(":", 1)[1].strip()
-                if url.startswith("http"):
+
+                # Security: Skip URLs that are too long
+                if len(url) > MAX_URL_LENGTH:
+                    continue
+
+                # Security: Validate URL (SSRF protection)
+                if url.startswith("http") and validate_url(url):
                     urls.append(url)
 
     return urls[:20]  # Max 20
@@ -168,14 +190,23 @@ def parse_pick_urls_full(response: str) -> dict:
     """
     Parst die Pick-URLs-Response KOMPLETT (URLs + Rejections).
 
+    Security:
+    - Response length is limited
+    - URLs are validated (SSRF protection)
+    - URL length is limited
+
     Args:
         response: LLM Response
 
     Returns:
         dict mit:
-        - urls: Liste der ausgewählten URLs
+        - urls: Liste der ausgewählten URLs (only safe URLs)
         - rejections: Liste der Rejection-Gründe (z.B. "5 URLs wegen Paywall")
     """
+    # Security: Limit response length
+    if len(response) > 100_000:
+        response = response[:100_000]
+
     urls = []
     rejections = []
 
@@ -184,14 +215,21 @@ def parse_pick_urls_full(response: str) -> dict:
         if line.lower().startswith("url"):
             if ":" in line:
                 url = line.split(":", 1)[1].strip()
-                if url.startswith("http"):
+
+                # Security: Skip URLs that are too long
+                if len(url) > MAX_URL_LENGTH:
+                    continue
+
+                # Security: Validate URL (SSRF protection)
+                if url.startswith("http") and validate_url(url):
                     urls.append(url)
+
         elif line.lower().startswith("rejected:"):
             reason = line.split(":", 1)[1].strip()
-            if reason:
+            if reason and len(reason) < 500:  # Limit reason length
                 rejections.append(reason)
 
     return {
         "urls": urls[:20],
-        "rejections": rejections
+        "rejections": rejections[:10]  # Limit rejections too
     }

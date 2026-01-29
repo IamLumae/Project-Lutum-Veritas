@@ -8,6 +8,57 @@ import { useState, useCallback } from "react";
 
 const BACKEND_URL = "http://127.0.0.1:8420";
 
+/**
+ * Übersetzt technische Fehler in benutzerfreundliche Nachrichten.
+ */
+function getUserFriendlyError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  const lowerMsg = msg.toLowerCase();
+
+  // Netzwerk-Fehler
+  if (lowerMsg.includes('fetch') || lowerMsg.includes('network') || lowerMsg.includes('failed to fetch')) {
+    return 'Verbindung zum Backend fehlgeschlagen. Bitte prüfe ob das Backend läuft.';
+  }
+
+  // Timeout
+  if (lowerMsg.includes('timeout') || lowerMsg.includes('aborted')) {
+    return 'Die Anfrage hat zu lange gedauert. Bitte versuche es erneut.';
+  }
+
+  // HTTP Status Codes
+  if (lowerMsg.includes('http 401') || lowerMsg.includes('unauthorized')) {
+    return 'API-Key ist ungültig. Bitte in den Einstellungen überprüfen.';
+  }
+  if (lowerMsg.includes('http 403') || lowerMsg.includes('forbidden')) {
+    return 'Zugriff verweigert. API-Key hat keine Berechtigung.';
+  }
+  if (lowerMsg.includes('http 429') || lowerMsg.includes('rate limit')) {
+    return 'Zu viele Anfragen. Bitte warte kurz und versuche es dann erneut.';
+  }
+  if (lowerMsg.includes('http 500') || lowerMsg.includes('internal server')) {
+    return 'Backend-Fehler. Bitte versuche es erneut.';
+  }
+  if (lowerMsg.includes('http 502') || lowerMsg.includes('http 503') || lowerMsg.includes('http 504')) {
+    return 'Backend nicht erreichbar. Bitte starte das Backend neu.';
+  }
+
+  // API-spezifische Fehler
+  if (lowerMsg.includes('api key') || lowerMsg.includes('api_key')) {
+    return 'Problem mit dem API-Key. Bitte in den Einstellungen überprüfen.';
+  }
+  if (lowerMsg.includes('quota') || lowerMsg.includes('credits')) {
+    return 'API-Kontingent aufgebraucht. Bitte API-Key-Guthaben prüfen.';
+  }
+
+  // Wenn nichts passt, aber kurze technische Message
+  if (msg.length < 100 && !lowerMsg.includes('error')) {
+    return msg; // Kurze Messages können durchgereicht werden
+  }
+
+  // Fallback für alles andere
+  return 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.';
+}
+
 export interface ChatResponse {
   response: string;
   url_scraped: string | null;
@@ -56,7 +107,36 @@ export interface DeepResearchResponse {
   total_points: number;
   total_sources: number;
   duration_seconds: number;
+  source_registry?: Record<number, string>;  // NEU: {1: "url1", 2: "url2", ...} für klickbare Citations
   error: string | null;
+}
+
+/** Academic Research Response (erweitert Deep Research) */
+export interface AcademicResearchResponse extends DeepResearchResponse {
+  total_bereiche: number;
+}
+
+/** Event wenn ein Bereich startet (Academic Mode) */
+export interface BereichStartEvent {
+  bereichTitle: string;
+  bereichNumber: number;
+  totalBereiche: number;
+  pointsInBereich: number;
+}
+
+/** Event wenn ein Bereich abgeschlossen ist (Academic Mode) */
+export interface BereichCompleteEvent {
+  bereichTitle: string;
+  bereichNumber: number;
+  totalBereiche: number;
+  dossiersCount: number;
+  sourcesCount: number;
+}
+
+/** Event wenn Meta-Synthese startet (Academic Mode) */
+export interface MetaSynthesisStartEvent {
+  bereicheCount: number;
+  totalSources: number;
 }
 
 export interface ContextState {
@@ -67,12 +147,15 @@ export interface ContextState {
   plan_version: number;
   session_title: string;
   current_step: number;
+  /** Academic Mode: Hierarchische Bereiche mit Unterpunkten */
+  academic_bereiche?: Record<string, string[]>;
 }
 
 export interface PlanResponse {
   plan_points: string[];
   plan_text: string;
   context_state: ContextState;
+  academic_bereiche?: Record<string, string[]>;  // Academic Mode: Hierarchische Bereiche
   error: string | null;
 }
 
@@ -162,7 +245,7 @@ export function useBackend() {
 
         return data;
       } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : "Unknown error";
+        const errorMsg = getUserFriendlyError(e);
         setState((s) => ({ ...s, loading: false, error: errorMsg }));
         return null;
       }
@@ -200,7 +283,7 @@ export function useBackend() {
 
         return data;
       } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : "Unknown error";
+        const errorMsg = getUserFriendlyError(e);
         setState((s) => ({ ...s, loading: false, error: errorMsg }));
         return null;
       }
@@ -279,7 +362,7 @@ export function useBackend() {
 
         return result;
       } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : "Unknown error";
+        const errorMsg = getUserFriendlyError(e);
         setState((s) => ({ ...s, loading: false, error: errorMsg }));
         return null;
       }
@@ -332,7 +415,7 @@ export function useBackend() {
 
         return data;
       } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : "Unknown error";
+        const errorMsg = getUserFriendlyError(e);
         setState((s) => ({ ...s, loading: false, error: errorMsg }));
         return null;
       }
@@ -383,7 +466,7 @@ export function useBackend() {
 
         return data;
       } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : "Unknown error";
+        const errorMsg = getUserFriendlyError(e);
         setState((s) => ({ ...s, loading: false, error: errorMsg }));
         return null;
       }
@@ -406,8 +489,8 @@ export function useBackend() {
       onSynthesisStart?: (event: SynthesisStartEvent) => void,
       modelSize: string = 'small',
       academicMode: boolean = false,
-      workModel: string = 'google/gemini-2.5-flash-preview-05-20',
-      finalModel: string = 'anthropic/claude-sonnet-4'
+      workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
+      finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct'
     ): Promise<DeepResearchResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -493,7 +576,7 @@ export function useBackend() {
 
         return result;
       } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : "Unknown error";
+        const errorMsg = getUserFriendlyError(e);
         setState((s) => ({ ...s, loading: false, error: errorMsg }));
         return null;
       }
@@ -501,17 +584,150 @@ export function useBackend() {
     []
   );
 
-  // Synthesis Recovery - holt letzte gespeicherte Synthesis wenn SSE fehlgeschlagen
-  const recoverSynthesis = useCallback(async (): Promise<{
+  /**
+   * Step 5 Academic: Academic Research Pipeline - STREAMING.
+   * Hierarchische Bereiche mit Meta-Synthese am Ende.
+   */
+  const runAcademicResearch = useCallback(
+    async (
+      contextState: ContextState & { academic_bereiche?: Record<string, string[]> },
+      apiKey: string,
+      sessionId?: string,
+      onStatus?: (status: string) => void,
+      onSources?: (urls: string[]) => void,
+      onPointComplete?: (event: PointCompleteEvent) => void,
+      onBereichStart?: (event: BereichStartEvent) => void,
+      onBereichComplete?: (event: BereichCompleteEvent) => void,
+      onMetaSynthesisStart?: (event: MetaSynthesisStartEvent) => void,
+      workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
+      finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct'
+    ): Promise<AcademicResearchResponse | null> => {
+      setState((s) => ({ ...s, loading: true, error: null }));
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/research/academic`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            context_state: contextState,
+            api_key: apiKey,
+            session_id: sessionId,
+            work_model: workModel,
+            final_model: finalModel,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || `HTTP ${response.status}`);
+        }
+
+        // Stream lesen
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response body");
+
+        const decoder = new TextDecoder();
+        let result: AcademicResearchResponse | null = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = decoder.decode(value, { stream: true });
+          const lines = text.split("\n").filter((l) => l.trim());
+
+          for (const line of lines) {
+            try {
+              const parsed = JSON.parse(line);
+
+              if (parsed.type === "status" && onStatus) {
+                onStatus(parsed.message);
+              } else if (parsed.type === "sources" && onSources && parsed.urls) {
+                onSources(parsed.urls);
+                if (onStatus) onStatus(parsed.message);
+              } else if (parsed.type === "point_complete" && onPointComplete) {
+                // Punkt abgeschlossen
+                onPointComplete({
+                  pointTitle: parsed.point_title,
+                  pointNumber: parsed.point_number,
+                  totalPoints: parsed.total_points,
+                  keyLearnings: parsed.key_learnings,
+                  dossierFull: parsed.dossier_full,
+                  sources: parsed.sources || [],
+                  skipped: parsed.skipped || false,
+                  skipReason: parsed.skip_reason,
+                });
+              } else if (parsed.type === "bereich_start" && onBereichStart) {
+                // Bereich startet
+                onBereichStart({
+                  bereichTitle: parsed.bereich_title,
+                  bereichNumber: parsed.bereich_number,
+                  totalBereiche: parsed.total_bereiche,
+                  pointsInBereich: parsed.points_in_bereich,
+                });
+              } else if (parsed.type === "bereich_complete" && onBereichComplete) {
+                // Bereich abgeschlossen
+                onBereichComplete({
+                  bereichTitle: parsed.bereich_title,
+                  bereichNumber: parsed.bereich_number,
+                  totalBereiche: parsed.total_bereiche,
+                  dossiersCount: parsed.dossiers_count,
+                  sourcesCount: parsed.sources_count,
+                });
+              } else if (parsed.type === "meta_synthesis_start" && onMetaSynthesisStart) {
+                // Meta-Synthese startet
+                onMetaSynthesisStart({
+                  bereicheCount: parsed.bereiche_count,
+                  totalSources: parsed.total_sources,
+                });
+                if (onStatus) onStatus(parsed.message);
+              } else if (parsed.type === "done") {
+                result = parsed.data;
+              } else if (parsed.type === "error") {
+                throw new Error(parsed.message);
+              }
+            } catch (parseErr) {
+              console.warn("Failed to parse stream line:", line);
+            }
+          }
+        }
+
+        setState((s) => ({ ...s, loading: false, connected: true }));
+
+        if (result?.error) {
+          setState((s) => ({ ...s, error: result.error }));
+        }
+
+        return result;
+      } catch (e) {
+        const errorMsg = getUserFriendlyError(e);
+        setState((s) => ({ ...s, loading: false, error: errorMsg }));
+        return null;
+      }
+    },
+    []
+  );
+
+  // Session Recovery - holt Checkpoint der letzten Session
+  const recoverSession = useCallback(async (sessionId?: string): Promise<{
     success: boolean;
-    final_document?: string;
-    filename?: string;
+    session_id?: string;
+    user_query?: string;
+    research_plan?: string[];
+    completed_dossiers?: Array<{ point: string; dossier: string; sources: string[] }>;
+    remaining_points?: string[];
+    status?: string;
     error?: string;
   } | null> => {
     try {
       setState((s) => ({ ...s, loading: true, error: null }));
 
-      const response = await fetch(`${BACKEND_URL}/research/latest-synthesis`);
+      // Wenn keine sessionId gegeben, hole die neueste
+      const url = sessionId
+        ? `${BACKEND_URL}/research/session/${sessionId}`
+        : `${BACKEND_URL}/research/latest-synthesis`;
+
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -523,7 +739,103 @@ export function useBackend() {
 
       return result;
     } catch (e) {
-      const errorMsg = e instanceof Error ? e.message : "Unknown error";
+      const errorMsg = getUserFriendlyError(e);
+      setState((s) => ({ ...s, loading: false, error: errorMsg }));
+      return null;
+    }
+  }, []);
+
+  // Liste aller Sessions holen
+  const listSessions = useCallback(async (): Promise<{
+    sessions: Array<{
+      session_id: string;
+      user_query: string;
+      status: string;
+      completed_dossiers: number;
+      total_points: number;
+      last_modified: string;
+    }>;
+  } | null> => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/research/sessions`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (e) {
+      console.error("Failed to list sessions:", e);
+      return null;
+    }
+  }, []);
+
+  // Session fortsetzen - ruft /research/resume auf
+  const resumeSession = useCallback(async (
+    sessionId: string,
+    apiKey: string,
+    workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
+    finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct',
+    onStatus?: (status: string) => void,
+    onSources?: (urls: string[]) => void,
+    onPointComplete?: (event: PointCompleteEvent) => void,
+    onSynthesisStart?: (event: SynthesisStartEvent) => void
+  ): Promise<DeepResearchResponse | null> => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/research/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          api_key: apiKey,
+          work_model: workModel,
+          final_model: finalModel
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      // Streaming Response verarbeiten (gleich wie runDeepResearch)
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No reader");
+
+      const decoder = new TextDecoder();
+      let finalResult: DeepResearchResponse | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n").filter(Boolean);
+
+        for (const line of lines) {
+          try {
+            const event = JSON.parse(line);
+
+            if (event.type === "status" && onStatus) {
+              onStatus(event.message);
+            } else if (event.type === "sources" && onSources) {
+              onSources(event.urls);
+            } else if (event.type === "point_complete" && onPointComplete) {
+              onPointComplete(event as PointCompleteEvent);
+            } else if (event.type === "synthesis_start" && onSynthesisStart) {
+              onSynthesisStart(event as SynthesisStartEvent);
+            } else if (event.type === "done") {
+              finalResult = event.data;
+            } else if (event.type === "error") {
+              throw new Error(event.message);
+            }
+          } catch {
+            // Skip invalid JSON lines
+          }
+        }
+      }
+
+      setState((s) => ({ ...s, loading: false }));
+      return finalResult;
+    } catch (e) {
+      const errorMsg = getUserFriendlyError(e);
       setState((s) => ({ ...s, loading: false, error: errorMsg }));
       return null;
     }
@@ -538,6 +850,9 @@ export function useBackend() {
     createPlan,
     revisePlan,
     runDeepResearch,
-    recoverSynthesis,
+    runAcademicResearch,
+    recoverSession,
+    listSessions,
+    resumeSession,
   };
 }

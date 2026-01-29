@@ -8,12 +8,58 @@ TEXT-ONLY APPROACH:
 - Nur Informationen aus dem gescrapten Text
 - Evidenz-Snippets statt Halluzination
 - Ehrlich bei Lücken ("nicht angegeben")
+
+FORMAT v2.0:
+- Universelle Marker für Parser (## EMOJI TITEL)
+- Inline Citations [N] mit Quellenverzeichnis
+- PFLICHT vs OPTIONAL Sektionen
 """
 
 DOSSIER_SYSTEM_PROMPT = """Du bist ein Experte für wissenschaftliche Analyse und Wissensaufbereitung.
 
-Deine Aufgabe: Erstelle ein präzises, tiefgehendes Dossier zu EINEM spezifischen Recherche-Punkt.
-Du arbeitest NUR mit den gelieferten Quelleninhalten.
+═══════════════════════════════════════════════════════════════════
+                    SPRACHE (KRITISCH!)
+═══════════════════════════════════════════════════════════════════
+
+WICHTIG: Antworte IMMER in der Sprache der ursprünglichen Nutzer-Anfrage!
+- Deutsche Anfrage → Deutsches Dossier
+- English query → English dossier
+- Mischung → Sprache des Hauptteils der Anfrage
+
+═══════════════════════════════════════════════════════════════════
+                    CITATION-SYSTEM (PFLICHT!)
+═══════════════════════════════════════════════════════════════════
+
+JEDE faktische Aussage MUSS mit einer Citation markiert werden:
+- Format: Text mit Aussage[1] und weitere Aussage[2]
+- Nummer ist fortlaufend: [1], [2], [3]...
+- Am Ende: Quellenverzeichnis mit === SOURCES === Block
+
+BEISPIEL:
+"RAG erreicht 95% Accuracy bei strukturierten Benchmarks"[1], während
+traditionelle Methoden bei etwa 70% stagnieren[2].
+
+═══════════════════════════════════════════════════════════════════
+                    FORMAT-MARKER (PFLICHT!)
+═══════════════════════════════════════════════════════════════════
+
+Diese Marker ermöglichen automatisches Parsing - EXAKT so verwenden:
+
+SEKTIONEN:      ## EMOJI TITEL
+                Beispiel: ## 📋 HEADER
+
+TABELLEN:       | Col1 | Col2 | Col3 |
+                |------|------|------|
+                | data | data | data |
+
+LISTEN:         1) Erster Punkt
+                2) Zweiter Punkt
+                (NICHT 1. oder - für nummerierte Listen!)
+
+HIGHLIGHT-BOX:  > 💡 **Wichtig:** Text hier
+                > ⚠️ **Warnung:** Text hier
+
+KEY-VALUE:      - **Schlüssel:** Wert
 
 ═══════════════════════════════════════════════════════════════════
                          HARTREGELN (PFLICHT)
@@ -25,40 +71,37 @@ Du arbeitest NUR mit den gelieferten Quelleninhalten.
 
 2. **TEXT-ONLY LEDGER**: Fülle Core-Spalten immer. Meta-Spalten nur wenn explizit im Text sichtbar, sonst "N/A".
 
-3. **EVIDENZ-SNIPPET PFLICHT**: Jeder Ledger-Eintrag und jeder Claim braucht ein kurzes Snippet (≤20 Wörter) aus dem Quelltext als Beleg.
+3. **EVIDENZ-SNIPPET PFLICHT**: Jeder Ledger-Eintrag braucht ein kurzes Snippet (≤20 Wörter) aus dem Quelltext.
 
 4. **KEINE HALLUZINATIONEN**: Wenn Information fehlt → "nicht in den Quellen angegeben".
 
-5. **CLAIM AUDIT PFLICHT**: Große Claims ("1000x", "revolutionär") IMMER mit Kontext prüfen (Hardware/Setup/Baseline/Trade-offs).
-
-6. **ABSCHLUSSMARKER PFLICHT**: Am Ende IMMER "=== END DOSSIER ===" ausgeben.
-   Bei Truncation: "=== INCOMPLETE (TRUNCATED) ===" statt offenem Satz.
+5. **ABSCHLUSSMARKER PFLICHT**: Am Ende IMMER "=== END DOSSIER ===" ausgeben.
 
 ═══════════════════════════════════════════════════════════════════
-                         LEDGER-FORMATE (Text-Only)
+                         LEDGER-FORMATE
 ═══════════════════════════════════════════════════════════════════
 
-**Repo-Ledger** (wenn Repos im Fokus):
-| Repo/Projekt | Link | Technik/Keyword | Claim (1 Satz) | Evidenz-Snippet | Reifegrad | Notes |
+Wähle das passende Ledger-Format:
 
-**Paper-Ledger** (wenn Papers im Fokus):
-| Paper | Link | Jahr (falls im Text) | Beitrag | Kernergebnis | Evidenz-Snippet | Limitations |
+**Repo-Ledger:**
+| # | Repo | Technik | Kernaussage | Evidenz-Snippet | Bewertung |
+|---|------|---------|-------------|-----------------|-----------|
+| [1] | Name | ... | ... | "..." | ⭐⭐⭐ |
 
-**Thread-Ledger** (wenn Foren/Reddit im Fokus):
-| Plattform | Link | Thema | Hauptargument | Takeaway | Evidenz-Snippet | Credibility |
+**Paper-Ledger:**
+| # | Paper | Jahr | Beitrag | Kernergebnis | Evidenz-Snippet |
+|---|-------|------|---------|--------------|-----------------|
+| [1] | Name | ... | ... | ... | "..." |
 
-**Issue-Ledger** (wenn Issues/PRs im Fokus):
-| Projekt | Issue/PR | Status | Feature | Link | Notes |
+**Thread-Ledger:**
+| # | Plattform | Thema | Hauptargument | Takeaway | Evidenz-Snippet |
+|---|-----------|-------|---------------|----------|-----------------|
+| [1] | Reddit | ... | ... | ... | "..." |
 
-→ Meta-Spalten (Stars, Last-Commit, Datum) nur wenn im Text vorhanden, sonst N/A.
-
-═══════════════════════════════════════════════════════════════════
-                         FORMAT-REGELN
-═══════════════════════════════════════════════════════════════════
-
-- Keine Textwände: Bevorzuge Listen + Tabellen + kurze Absätze
-- Max 5 Zeilen pro Absatz
-- Jede Aussage mit Quellenreferenz oder als "Einschätzung" gekennzeichnet
+**Mixed-Ledger (für verschiedene Quellenarten):**
+| # | Quelle | Typ | Kernaussage | Evidenz-Snippet | Bewertung |
+|---|--------|-----|-------------|-----------------|-----------|
+| [1] | Name | Repo/Paper/Thread | ... | "..." | ⭐⭐⭐ |
 """
 
 DOSSIER_USER_PROMPT = """
@@ -85,104 +128,136 @@ AKTUELLER RECHERCHE-PUNKT:
 {scraped_content}
 
 ═══════════════════════════════════════════════════════════════════
-                    AUSGABE-STRUKTUR (PFLICHT)
+                    AUSGABE-STRUKTUR
 ═══════════════════════════════════════════════════════════════════
 
-Erstelle das Dossier EXAKT in dieser Reihenfolge:
+Erstelle das Dossier mit diesen Sektionen.
+PFLICHT-Sektionen: IMMER ausgeben.
+OPTIONAL-Sektionen: NUR wenn für dieses Thema relevant!
 
 ---
 
-### 1) DOSSIER HEADER
+## 📋 HEADER
+
 - **Thema:** {current_point}
-- **Bezug zum Gesamtziel:** 1-2 Sätze
-- **Quellenumfang:** Anzahl + Art der Quellen (Paper/Repo/Thread/Docs)
+- **Bezug:** 1-2 Sätze wie dieser Punkt zum Gesamtziel beiträgt
+- **Quellen:** Anzahl + Art (z.B. "5 Repos, 2 Papers, 3 Threads")
 
 ---
 
-### 2) EVIDENCE LEDGER (PFLICHT-TABELLE)
-Erstelle eine Markdown-Tabelle passend zum Punkt:
-- Repos → Repo-Ledger
-- Papers → Paper-Ledger
-- Threads → Thread-Ledger
-- Issues → Issue-Ledger
-- Mischung → max 2 Tabellen
+## 📊 EVIDENCE
 
-WICHTIG: Jeder Eintrag braucht ein **Evidenz-Snippet** (≤20 Wörter aus dem Text)!
+Erstelle eine Markdown-Tabelle mit allen relevanten Quellen.
+WICHTIG: Die # Spalte enthält die Citation-Nummer [1], [2], etc.
 
----
+| # | Quelle | Typ | Kernaussage | Evidenz-Snippet | Bewertung |
+|---|--------|-----|-------------|-----------------|-----------|
+| [1] | ... | Repo/Paper/Thread | ... | "direktes Zitat ≤20 Wörter" | ⭐⭐⭐ |
+| [2] | ... | ... | ... | "..." | ⭐⭐ |
 
-### 3) KERNSUMMARY (max 6 Bullet Points)
-- Nur das Wichtigste, kein Fluff
-- Jeder Punkt mit Quellenreferenz
+(Bewertung: ⭐ = schwach, ⭐⭐ = mittel, ⭐⭐⭐ = stark)
 
 ---
 
-### 4) TECHNISCHE DETAILANALYSE
+## 🎯 KERNSUMMARY
 
-**Mechanismus:** Was passiert technisch? (Schritt-für-Schritt wenn möglich)
+Die wichtigsten Erkenntnisse (5-7 Punkte):
 
-**Voraussetzungen:** Was braucht man? (Modelle, DB, Hardware, Daten)
+1) Erste Kernerkenntnis mit Quellenbeleg[1]
+2) Zweite Kernerkenntnis[2][3]
+3) Dritte Kernerkenntnis[4]
+4) ...
 
-**Trade-offs:** Kosten vs. Latenz vs. Recall vs. Komplexität
-
-**Implementierungsnotizen:** Worauf achten beim Nachbauen?
-
----
-
-### 5) CLAIM AUDIT (PFLICHT-TABELLE)
-
-| Claim | Quelle | Messgröße | Baseline | Setup/Hardware | Datensatz | Ergebnis | Einschränkungen | Confidence |
-|-------|--------|-----------|----------|----------------|-----------|----------|-----------------|------------|
-
-- Wenn Details fehlen: "nicht angegeben" (NICHT raten!)
-- Große Claims besonders kritisch prüfen
+> 💡 **Zentrale Erkenntnis:** Ein Satz der alles zusammenfasst.
 
 ---
 
-### 6) REPRODUZIERBARKEIT
+## 🔍 ANALYSE
 
-**Minimaler Repro-Plan:** (3-7 Schritte)
-1. ...
-2. ...
+Detaillierte Untersuchung - passe die Struktur an das Thema an:
 
-**Metriken:** Was muss gemessen werden?
+**Kontext:** Was ist der Hintergrund?[1]
+
+**Kernmechanismus:** Wie funktioniert es? (bei Tech-Themen)
+ODER **Kernargumente:** Was sind die Hauptpositionen? (bei Debatten)
+ODER **Chronologie:** Wie hat es sich entwickelt? (bei historischen Themen)
+
+**Zusammenhänge:** Wie hängt es mit anderen Aspekten zusammen?[2]
+
+**Trade-offs:** Was sind die Vor- und Nachteile?
+- **Pro:** ...
+- **Contra:** ...
+
+---
+
+## 🔬 CLAIM AUDIT
+(OPTIONAL - NUR wenn quantitative Claims geprüft werden müssen!)
+
+| Claim | Quelle | Messgröße | Baseline | Setup | Ergebnis | Einschränkungen | Confidence |
+|-------|--------|-----------|----------|-------|----------|-----------------|------------|
+| "95% Accuracy" | [1] | Accuracy | 70% Standard | GPT-4, HotpotQA | 95.2% | Nur Englisch | ⭐⭐⭐ |
+
+> ⚠️ **Vorsicht:** Claims ohne Baseline/Setup sind schwach belegt.
+
+---
+
+## 🔄 REPRODUKTION
+(OPTIONAL - NUR bei Tech/Science Themen wo Nachbau relevant ist!)
+
+**Minimaler Repro-Plan:**
+1) Schritt 1
+2) Schritt 2
+3) ...
+
+**Voraussetzungen:** Hardware, Software, Daten
 
 **Failure Modes:** Was kann schiefgehen?
 
 ---
 
-### 7) BEWERTUNG
+## ⚖️ BEWERTUNG
 
-**Stärken:** (3-5 Bullets)
-- ...
+> 💡 **Stärken:**
+- Stärke 1[1]
+- Stärke 2[2]
+- Stärke 3
 
-**Schwächen/Limitationen:** (3-5 Bullets)
-- ...
+> ⚠️ **Schwächen:**
+- Schwäche 1
+- Schwäche 2
+- Schwäche 3
 
-**Offene Fragen:** (3-5 Bullets)
-- ...
+> ❓ **Offene Fragen:**
+- Frage 1
+- Frage 2
+- Frage 3
 
 ---
 
-=== KEY LEARNINGS ===
+## 💡 KEY LEARNINGS
 
 **Erkenntnisse:**
-- [Wichtigste Erkenntnis 1]
-- [Wichtigste Erkenntnis 2]
-- [Wichtigste Erkenntnis 3]
-(max 5 Punkte, je 1 Satz)
+1) Wichtigste Erkenntnis in einem Satz[1]
+2) Zweitwichtigste Erkenntnis[2]
+3) Drittwichtigste Erkenntnis[3]
+(max 5 Punkte)
 
 **Beste Quellen:**
-- [URL 1] - [Warum wertvoll in 5 Worten]
-- [URL 2] - [Warum wertvoll in 5 Worten]
-(max 3 URLs)
+- [1] - Warum wertvoll (5 Wörter)
+- [2] - Warum wertvoll (5 Wörter)
+(max 3 Einträge)
 
-**Für nächste Schritte relevant:**
-[1 Satz: Was sollten nachfolgende Recherche-Punkte wissen/beachten?]
-
-=== END LEARNINGS ===
+**Für nächste Schritte:**
+Ein Satz was nachfolgende Recherche-Punkte wissen/beachten sollten.
 
 ---
+
+=== SOURCES ===
+[1] URL_DER_QUELLE_1 - Kurztitel oder Beschreibung
+[2] URL_DER_QUELLE_2 - Kurztitel oder Beschreibung
+[3] URL_DER_QUELLE_3 - Kurztitel oder Beschreibung
+...
+=== END SOURCES ===
 
 === END DOSSIER ===
 """
@@ -216,33 +291,78 @@ def build_dossier_prompt(
     return DOSSIER_SYSTEM_PROMPT, user_prompt
 
 
-def parse_dossier_response(response: str) -> tuple[str, str]:
+def parse_dossier_response(response: str) -> tuple[str, str, dict]:
     """
-    Parst die Dossier-Response und extrahiert Key Learnings.
+    Parst die Dossier-Response und extrahiert Key Learnings + Citations.
+
+    Security:
+    - Input length limited to prevent ReDoS
+    - Citation numbers limited to prevent integer overflow
+    - Uses find() instead of greedy regex to prevent catastrophic backtracking
 
     Args:
         response: Volle LLM Response
 
     Returns:
-        Tuple (dossier_text, key_learnings)
+        Tuple (dossier_text, key_learnings, citations)
         - dossier_text: Das vollständige Dossier
-        - key_learnings: Der vollständige Learning-Block
+        - key_learnings: Der Key Learnings Block
+        - citations: Dict {1: "url - title", 2: "url - title", ...}
     """
+    import re
+
+    # Security: Limit response length to prevent ReDoS
+    MAX_RESPONSE_LENGTH = 500_000  # 500KB max
+    if len(response) > MAX_RESPONSE_LENGTH:
+        response = response[:MAX_RESPONSE_LENGTH]
+
     dossier_text = response
     key_learnings = ""
+    citations = {}
 
-    # Key Learnings extrahieren (MARKER BEIBEHALTEN für Parser!)
-    if "=== KEY LEARNINGS ===" in response:
+    # Security: Use find() instead of regex to prevent ReDoS
+    sources_start = response.find('=== SOURCES ===')
+    sources_end = response.find('=== END SOURCES ===')
+
+    if sources_start >= 0 and sources_end > sources_start:
+        sources_block = response[sources_start + len('=== SOURCES ==='):sources_end]
+        for line in sources_block.strip().split('\n'):
+            line = line.strip()
+            if not line or len(line) > 2000:  # Security: Skip overly long lines
+                continue
+            # Format: [N] URL - Title (limit to 5 digits = max 99999)
+            match = re.match(r'^\[(\d{1,5})\]\s+(.{1,1900})$', line)
+            if match:
+                num = int(match.group(1))
+                if 1 <= num <= 99999:  # Security: Validate range
+                    url_and_title = match.group(2).strip()
+                    citations[num] = url_and_title
+
+    # Key Learnings extrahieren (neues Format: ## 💡 KEY LEARNINGS)
+    if "## 💡 KEY LEARNINGS" in response:
+        parts = response.split("## 💡 KEY LEARNINGS")
+        dossier_text = parts[0].strip()
+
+        if len(parts) > 1:
+            learnings_part = parts[1]
+            # Bis zum Sources Block oder End Marker
+            if "=== SOURCES ===" in learnings_part:
+                key_learnings = learnings_part.split("=== SOURCES ===")[0].strip()
+            elif "=== END DOSSIER ===" in learnings_part:
+                key_learnings = learnings_part.split("=== END DOSSIER ===")[0].strip()
+            else:
+                key_learnings = learnings_part.strip()
+
+    # Fallback: Altes Format (=== KEY LEARNINGS ===)
+    elif "=== KEY LEARNINGS ===" in response:
         parts = response.split("=== KEY LEARNINGS ===")
         dossier_text = parts[0].strip()
 
         if len(parts) > 1:
             learnings_part = parts[1]
-            # End-Marker finden
             if "=== END LEARNINGS ===" in learnings_part:
                 key_learnings = learnings_part.split("=== END LEARNINGS ===")[0].strip()
             else:
-                # Fallback: Alles nach dem Start-Marker
                 key_learnings = learnings_part.strip()
 
-    return dossier_text, key_learnings
+    return dossier_text, key_learnings, citations

@@ -8,7 +8,9 @@ SSE Events für Fortschrittsanzeige
 """
 
 import asyncio
+import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -131,9 +133,9 @@ class OverviewRequest(BaseModel):
         session_id: Session ID für Events (optional)
         api_key: OpenRouter API Key
     """
-    message: str = Field(..., description="User Nachricht / Research-Auftrag")
-    session_id: Optional[str] = Field(None, description="Session ID für SSE Events")
-    api_key: str = Field(..., description="OpenRouter API Key")
+    message: str = Field(..., description="User Nachricht / Research-Auftrag", max_length=10000)
+    session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
+    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
 
 
 class OverviewResponse(BaseModel):
@@ -215,10 +217,10 @@ async def research_overview(request: OverviewRequest):
 
 class PipelineRequest(BaseModel):
     """Request für vollständige Pipeline."""
-    message: str = Field(..., description="User Nachricht / Research-Auftrag")
-    session_id: Optional[str] = Field(None, description="Session ID für SSE Events")
-    max_step: int = Field(3, description="Bis zu welchem Step ausführen (default 3)")
-    api_key: str = Field(..., description="OpenRouter API Key")
+    message: str = Field(..., description="User Nachricht / Research-Auftrag", max_length=10000)
+    session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
+    max_step: int = Field(3, ge=1, le=5, description="Bis zu welchem Step ausführen (default 3)")
+    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
 
 
 class PipelineResponse(BaseModel):
@@ -327,7 +329,8 @@ async def research_run(request: PipelineRequest):
 
         except Exception as e:
             logger.error(f"Pipeline failed: {e}", exc_info=True)
-            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+            # Security: Don't expose internal error details to client
+            yield json.dumps({"type": "error", "message": "Research pipeline failed. Please try again."}) + "\n"
 
     return StreamingResponse(
         generate(),
@@ -339,18 +342,20 @@ async def research_run(request: PipelineRequest):
 
 class PlanRequest(BaseModel):
     """Request für Plan-Erstellung (Step 4)."""
-    user_query: str = Field(..., description="Ursprüngliche User-Anfrage")
+    user_query: str = Field(..., description="Ursprüngliche User-Anfrage", max_length=10000)
     clarification_questions: list[str] = Field(default_factory=list, description="Rückfragen aus Step 3")
     clarification_answers: list[str] = Field(..., description="User-Antworten auf Rückfragen")
-    session_id: Optional[str] = Field(None, description="Session ID für SSE Events")
-    api_key: str = Field(..., description="OpenRouter API Key")
+    session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
+    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    academic_mode: bool = Field(False, description="Academic Mode: Hierarchische Bereiche statt flacher Liste")
 
 
 class PlanResponse(BaseModel):
     """Response mit Recherche-Plan."""
-    plan_points: list[str] = Field(default_factory=list, description="Plan-Punkte")
+    plan_points: list[str] = Field(default_factory=list, description="Plan-Punkte (Normal Mode)")
     plan_text: str = Field("", description="Formatierter Plan-Text")
     context_state: dict = Field(default_factory=dict, description="Aktueller Context State")
+    academic_bereiche: Optional[dict] = Field(None, description="Hierarchische Bereiche (Academic Mode)")
     error: Optional[str] = Field(None, description="Fehlermeldung")
 
 
@@ -359,16 +364,17 @@ async def research_plan(request: PlanRequest):
     """
     Step 4: Recherche-Plan erstellen.
 
-    Nimmt Context State mit User-Antworten und generiert
-    einen tiefgehenden Recherche-Plan (min. 5 Punkte).
+    Normal Mode: Flache Liste von Punkten
+    Academic Mode: Hierarchische Bereiche mit Unterpunkten
 
     Args:
-        request: PlanRequest mit Query, Rückfragen, Antworten
+        request: PlanRequest mit Query, Rückfragen, Antworten, academic_mode
 
     Returns:
-        PlanResponse mit Plan-Punkten
+        PlanResponse mit Plan-Punkten oder academic_bereiche
     """
-    logger.info(f"Plan request for: {request.user_query[:100]}...")
+    mode_str = "ACADEMIC" if request.academic_mode else "NORMAL"
+    logger.info(f"Plan request ({mode_str}): {request.user_query[:100]}...")
 
     # API Key setzen
     set_api_key(request.api_key)
@@ -378,7 +384,7 @@ async def research_plan(request: PlanRequest):
 
         # Status Event
         if sid:
-            emit_event(sid, "step_start", "Erstelle Recherche-Plan...")
+            emit_event(sid, "step_start", f"Erstelle {'Academic' if request.academic_mode else ''} Recherche-Plan...")
 
         # Context State aufbauen
         context = ContextState()
@@ -389,27 +395,59 @@ async def research_plan(request: PlanRequest):
         if sid:
             emit_event(sid, "step_progress", "Analysiere deine Antworten...")
 
-        # Plan generieren
-        result = create_research_plan(context)
+        # === ACADEMIC MODE: Hierarchische Bereiche ===
+        if request.academic_mode:
+            from lutum.researcher.prompts import create_academic_plan, format_academic_plan
 
-        if result.get("error"):
+            result = create_academic_plan(context)
+
+            if result.get("error"):
+                if sid:
+                    emit_event(sid, "error", f"Academic Plan fehlgeschlagen: {result['error']}")
+                return PlanResponse(error=result["error"])
+
+            bereiche = result.get("bereiche", {})
+            total_points = sum(len(points) for points in bereiche.values())
+
+            # Context State mit academic_bereiche setzen
+            context_dict = context.to_dict()
+            context_dict["academic_bereiche"] = bereiche
+
             if sid:
-                emit_event(sid, "error", f"Plan-Erstellung fehlgeschlagen: {result['error']}")
-            return PlanResponse(error=result["error"])
+                emit_event(sid, "step_done", f"Academic Plan: {len(bereiche)} Bereiche, {total_points} Punkte")
+                emit_event(sid, "done", "Warte auf deine Entscheidung...")
 
-        # Plan in Context State setzen
-        context.set_plan(result["plan_points"])
+            return PlanResponse(
+                plan_points=[],  # Leer bei Academic Mode
+                plan_text=result.get("plan_text", ""),
+                context_state=context_dict,
+                academic_bereiche=bereiche,
+                error=None
+            )
 
-        if sid:
-            emit_event(sid, "step_done", f"Plan erstellt ({len(result['plan_points'])} Punkte)")
-            emit_event(sid, "done", "Warte auf deine Entscheidung...")
+        # === NORMAL MODE: Flache Liste ===
+        else:
+            result = create_research_plan(context)
 
-        return PlanResponse(
-            plan_points=result["plan_points"],
-            plan_text=result["plan_text"],
-            context_state=context.to_dict(),
-            error=None
-        )
+            if result.get("error"):
+                if sid:
+                    emit_event(sid, "error", f"Plan-Erstellung fehlgeschlagen: {result['error']}")
+                return PlanResponse(error=result["error"])
+
+            # Plan in Context State setzen
+            context.set_plan(result["plan_points"])
+
+            if sid:
+                emit_event(sid, "step_done", f"Plan erstellt ({len(result['plan_points'])} Punkte)")
+                emit_event(sid, "done", "Warte auf deine Entscheidung...")
+
+            return PlanResponse(
+                plan_points=result["plan_points"],
+                plan_text=result["plan_text"],
+                context_state=context.to_dict(),
+                academic_bereiche=None,
+                error=None
+            )
 
     except Exception as e:
         logger.error(f"Plan creation failed: {e}", exc_info=True)
@@ -419,9 +457,9 @@ async def research_plan(request: PlanRequest):
 class PlanReviseRequest(BaseModel):
     """Request für Plan-Überarbeitung."""
     context_state: dict = Field(..., description="Aktueller Context State")
-    feedback: str = Field(..., description="User-Feedback zum Plan")
-    session_id: Optional[str] = Field(None, description="Session ID für SSE Events")
-    api_key: str = Field(..., description="OpenRouter API Key")
+    feedback: str = Field(..., description="User-Feedback zum Plan", max_length=5000)
+    session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
+    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
 
 
 @router.post("/research/plan/revise", response_model=PlanResponse)
@@ -484,8 +522,10 @@ async def research_plan_revise(request: PlanReviseRequest):
 class DeepResearchRequest(BaseModel):
     """Request für Deep Research Pipeline."""
     context_state: dict = Field(..., description="Context State mit Plan")
-    session_id: Optional[str] = Field(None, description="Session ID für SSE Events")
-    api_key: str = Field(..., description="OpenRouter API Key")
+    session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
+    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="Modell für Vorarbeit (Think, Pick URLs, Dossier)", max_length=100)
+    final_model: str = Field("qwen/qwen3-vl-235b-a22b-instruct", description="Modell für Final Synthesis", max_length=100)
 
 
 class DeepResearchResponse(BaseModel):
@@ -524,8 +564,9 @@ async def research_deep(request: DeepResearchRequest):
     from lutum.researcher.search import _execute_all_searches_async, _close_google_session
     from lutum.scrapers.camoufox_scraper import scrape_urls_batch
 
-    # OpenRouter Config
-    MODEL_FAST = "google/gemini-3-flash-preview"
+    # OpenRouter Config - aus Request übernehmen
+    MODEL_FAST = request.work_model
+    MODEL_FINAL = request.final_model
 
     def call_llm(system_prompt: str, user_prompt: str, model: str = MODEL_FAST, timeout: int = 60, max_tokens: int = 8000) -> Optional[str]:
         """Ruft OpenRouter LLM auf."""
@@ -565,6 +606,34 @@ async def research_deep(request: DeepResearchRequest):
     # API Key setzen für alle LLM Calls
     set_api_key(request.api_key)
 
+    # === CHECKPOINT SYSTEM ===
+    import hashlib
+
+    def get_session_id(plan: list[str], user_query: str) -> str:
+        """Generiert eindeutige Session-ID aus Plan + Query."""
+        content = user_query + "|||" + "|||".join(plan)
+        return hashlib.sha1(content.encode()).hexdigest()[:12]
+
+    def get_checkpoint_dir(session_id: str) -> Path:
+        """Gibt Checkpoint-Verzeichnis für Session zurück."""
+        base_dir = Path(__file__).parent.parent.parent / "research_checkpoints"
+        return base_dir / session_id
+
+    def save_checkpoint(session_id: str, data: dict):
+        """Speichert Checkpoint für Session."""
+        checkpoint_dir = get_checkpoint_dir(session_id)
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint_file = checkpoint_dir / "checkpoint.json"
+        checkpoint_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.info(f"[CHECKPOINT] Saved for session {session_id}: {len(data.get('completed_dossiers', []))} dossiers")
+
+    def load_checkpoint(session_id: str) -> Optional[dict]:
+        """Lädt Checkpoint für Session."""
+        checkpoint_file = get_checkpoint_dir(session_id) / "checkpoint.json"
+        if checkpoint_file.exists():
+            return json.loads(checkpoint_file.read_text(encoding="utf-8"))
+        return None
+
     async def generate():
         try:
             # Context State laden
@@ -575,20 +644,85 @@ async def research_deep(request: DeepResearchRequest):
                 yield json.dumps({"type": "error", "message": "Kein Recherche-Plan vorhanden"}) + "\n"
                 return
 
-            total_points = len(research_plan)
             user_query = context.user_query
 
-            yield json.dumps({"type": "status", "message": f"Starte Deep Research mit {total_points} Punkten..."}) + "\n"
-
-            # Akkumulatoren
-            completed_dossiers = []  # Liste von {point, dossier, sources}
-            accumulated_learnings = []  # Key Learnings für Context-Pass
+            # Check ob Resume
+            is_resume = "_resumed_from" in request.context_state
+            completed_dossiers = request.context_state.get("_completed_dossiers", []) if is_resume else []
+            accumulated_learnings = request.context_state.get("_accumulated_learnings", []) if is_resume else []
             all_sources = []
+
+            # === GLOBALE SOURCE REGISTRY ===
+            # Trackt alle gepickten URLs mit globaler Nummerierung für Citations
+            # Problem: Jedes Dossier nummeriert [1], [2], [3] lokal
+            # Lösung: Nach jedem Dossier die lokalen Nummern durch globale ersetzen
+            source_registry: dict[int, str] = {}  # {1: "url1", 2: "url2", ...}
+            source_counter = 1  # Globaler Zähler
+
+            def renumber_citations(text: str, local_urls: list[str], start_num: int) -> tuple[str, int]:
+                """
+                Ersetzt lokale [1], [2], [3] durch globale Nummern [start_num], [start_num+1], ...
+
+                Returns:
+                    (renumbered_text, next_available_number)
+                """
+                import re
+                result = text
+                current_num = start_num
+
+                # Finde alle lokalen Citation-Nummern im Text
+                local_nums = set(int(m) for m in re.findall(r'\[(\d+)\]', text))
+
+                # Mapping: lokal → global
+                local_to_global = {}
+                for local_num in sorted(local_nums):
+                    local_to_global[local_num] = current_num
+                    current_num += 1
+
+                # Ersetze von hinten nach vorne (damit Nummern nicht kollidieren)
+                for local_num in sorted(local_nums, reverse=True):
+                    global_num = local_to_global[local_num]
+                    result = re.sub(rf'\[{local_num}\]', f'[{global_num}]', result)
+
+                    # URL zur Registry hinzufügen (wenn vorhanden)
+                    if local_num - 1 < len(local_urls):
+                        source_registry[global_num] = local_urls[local_num - 1]
+
+                return result, current_num
+
+            # Total Points = bereits fertig + noch offen
+            total_points = len(completed_dossiers) + len(research_plan)
+
+            # Session-ID generieren (bei Resume aus dem Original-Plan)
+            if is_resume:
+                session_id = request.context_state.get("_resumed_from", get_session_id(research_plan, user_query))
+            else:
+                session_id = get_session_id(research_plan, user_query)
+            logger.info(f"[SESSION] ID: {session_id}")
+
+            if is_resume:
+                logger.info(f"[RESUME] Continuing session with {len(completed_dossiers)} existing dossiers, {len(research_plan)} remaining")
+                yield json.dumps({
+                    "type": "status",
+                    "message": f"Session fortgesetzt: {len(completed_dossiers)}/{total_points} Dossiers fertig, {len(research_plan)} noch offen"
+                }) + "\n"
+            else:
+                yield json.dumps({"type": "status", "message": f"Starte Deep Research mit {total_points} Punkten..."}) + "\n"
+                # Initial Checkpoint: Plan gespeichert
+                save_checkpoint(session_id, {
+                    "user_query": user_query,
+                    "research_plan": research_plan,
+                    "completed_dossiers": [],
+                    "status": "started"
+                })
+
+            yield json.dumps({"type": "session_id", "session_id": session_id}) + "\n"
 
             # === HAUPTSCHLEIFE: Jeden Punkt abarbeiten ===
             # Kopie der Plan-Liste zum Abarbeiten (Original bleibt für Final Synthesis)
             remaining_points = list(research_plan)
-            point_index = 0
+            # Bei Resume: point_index bei len(completed_dossiers) starten
+            point_index = len(completed_dossiers) if is_resume else 0
 
             while remaining_points:
                 point_index += 1
@@ -878,21 +1012,39 @@ search 5: [Query]"""
                     }) + "\n"
                     continue
 
-                # Dossier + Key Learnings extrahieren
-                dossier_text, key_learnings = parse_dossier_response(dossier_response)
-                logger.info(f"[{point_index}] [DOSSIER] PARSED: dossier={len(dossier_text)} chars, learnings={len(key_learnings)} chars")
+                # Dossier + Key Learnings + Citations extrahieren
+                dossier_text, key_learnings, citations = parse_dossier_response(dossier_response)
+                logger.info(f"[{point_index}] [DOSSIER] PARSED: dossier={len(dossier_text)} chars, learnings={len(key_learnings)} chars, citations={len(citations)}")
                 logger.info(f"[{point_index}] [DOSSIER] KEY LEARNINGS:\n{key_learnings[:500] if key_learnings else 'NONE'}...")
+
+                # === GLOBALE CITATION-RENUMMERIERUNG ===
+                # Lokale [1], [2], [3] → Globale [source_counter], [source_counter+1], ...
+                dossier_urls = list(scraped_contents.keys())
+                dossier_text, source_counter = renumber_citations(dossier_text, dossier_urls, source_counter)
+                if key_learnings:
+                    key_learnings, _ = renumber_citations(key_learnings, dossier_urls, source_counter - len(dossier_urls))
+                logger.info(f"[{point_index}] [RENUMBER] Citations renumbered, next global num: {source_counter}")
 
                 # Speichern
                 completed_dossiers.append({
                     "point": current_point,
                     "dossier": dossier_text,
-                    "sources": list(scraped_contents.keys())
+                    "sources": dossier_urls
                 })
 
                 # Key Learnings akkumulieren für nächste Punkte
                 if key_learnings:
                     accumulated_learnings.append(key_learnings)
+
+                # CHECKPOINT nach jedem Dossier
+                save_checkpoint(session_id, {
+                    "user_query": user_query,
+                    "research_plan": research_plan,
+                    "completed_dossiers": completed_dossiers,
+                    "accumulated_learnings": accumulated_learnings,
+                    "remaining_points": remaining_points,
+                    "status": f"dossier_{point_index}_complete"
+                })
 
                 yield json.dumps({"type": "status", "message": f"[{point_index}] Dossier fertig!"}) + "\n"
 
@@ -932,17 +1084,25 @@ search 5: [Query]"""
                     "message": "Final Synthesis läuft - das dauert einige Minuten...",
                     "estimated_minutes": estimated_minutes,
                     "dossier_count": len(completed_dossiers),
-                    "total_sources": len(set(all_sources))
+                    "total_sources": len(source_registry)
                 }) + "\n"
+
+                # WICHTIG: Stream MUSS geflusht werden BEVOR der blocking LLM-Call startet
+                # asyncio.sleep allein reicht NICHT weil call_llm synchron ist und den Event Loop blockiert
+                # Lösung: call_llm in separatem Thread ausführen
+                await asyncio.sleep(0.1)
 
                 step_start = time.time()
 
-                final_document = call_llm(
-                    system_prompt=system_prompt,
-                    user_prompt=user_prompt,
-                    model=FINAL_SYNTHESIS_MODEL,
-                    timeout=FINAL_SYNTHESIS_TIMEOUT,
-                    max_tokens=32000  # Final Synthesis braucht VIEL mehr als 8000!
+                # LLM-Call in Thread ausführen damit Event Loop nicht blockiert wird
+                # So kommt synthesis_start WIRKLICH vor dem Result an
+                final_document = await asyncio.to_thread(
+                    call_llm,
+                    system_prompt,
+                    user_prompt,
+                    MODEL_FINAL,  # Aus Request: request.final_model
+                    FINAL_SYNTHESIS_TIMEOUT,
+                    32000  # Final Synthesis braucht VIEL mehr als 8000!
                 )
                 logger.info(f"TIMING: Final Synthesis took {time.time() - step_start:.1f}s")
                 logger.info(f"[FINAL] RAW LLM RESPONSE ({len(final_document) if final_document else 0} chars)")
@@ -972,20 +1132,25 @@ search 5: [Query]"""
 
             yield json.dumps({"type": "status", "message": f"Recherche abgeschlossen in {duration:.1f}s"}) + "\n"
 
+            # Source Registry für Frontend: {1: "url1", 2: "url2", ...}
+            logger.info(f"[DONE] Source Registry has {len(source_registry)} entries")
+
             yield json.dumps({
                 "type": "done",
                 "data": {
                     "final_document": final_document,
                     "total_points": len(completed_dossiers),
-                    "total_sources": len(set(all_sources)),
+                    "total_sources": len(source_registry),
                     "duration_seconds": duration,
+                    "source_registry": source_registry,  # NEU: Alle Quellen mit globaler Nummerierung
                     "error": None
                 }
             }) + "\n"
 
         except Exception as e:
             logger.error(f"Deep Research failed: {e}", exc_info=True)
-            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+            # Security: Don't expose internal error details to client
+            yield json.dumps({"type": "error", "message": "Deep research failed. Please try again."}) + "\n"
 
     return StreamingResponse(
         generate(),
@@ -993,58 +1158,606 @@ search 5: [Query]"""
     )
 
 
-# === SYNTHESIS RECOVERY ENDPOINT ===
+# === SESSION RECOVERY ENDPOINTS ===
 
-class SynthesisRecoveryResponse(BaseModel):
-    """Response für Synthesis Recovery."""
+class SessionInfo(BaseModel):
+    """Info über eine Research-Session."""
+    session_id: str
+    user_query: str
+    status: str
+    completed_dossiers: int
+    total_points: int
+    last_modified: str
+
+
+class SessionListResponse(BaseModel):
+    """Liste aller Sessions."""
+    sessions: list[SessionInfo]
+
+
+class SessionCheckpointResponse(BaseModel):
+    """Checkpoint einer Session."""
     success: bool
-    final_document: Optional[str] = None
-    filename: Optional[str] = None
+    session_id: Optional[str] = None
+    user_query: Optional[str] = None
+    research_plan: Optional[list[str]] = None
+    completed_dossiers: Optional[list[dict]] = None
+    remaining_points: Optional[list[str]] = None
+    status: Optional[str] = None
     error: Optional[str] = None
 
 
-@router.get("/latest-synthesis", response_model=SynthesisRecoveryResponse)
-async def get_latest_synthesis():
-    """
-    Holt die neueste gespeicherte Final Synthesis aus dem Backup-Ordner.
-
-    Wird verwendet wenn die SSE-Verbindung unterbrochen wurde und das
-    Frontend die Synthesis nicht empfangen hat.
-    """
+@router.get("/research/sessions", response_model=SessionListResponse)
+async def list_sessions():
+    """Listet alle Research-Sessions mit Checkpoints."""
     try:
-        backup_dir = Path(__file__).parent.parent.parent / "final_synthesis_backups"
+        checkpoint_base = Path(__file__).parent.parent.parent / "research_checkpoints"
 
-        if not backup_dir.exists():
-            return SynthesisRecoveryResponse(
-                success=False,
-                error="Kein Backup-Ordner gefunden"
-            )
+        if not checkpoint_base.exists():
+            return SessionListResponse(sessions=[])
 
-        # Neueste .md Datei finden
-        md_files = list(backup_dir.glob("synthesis_*.md"))
-
-        if not md_files:
-            return SynthesisRecoveryResponse(
-                success=False,
-                error="Keine Synthesis-Backups gefunden"
-            )
+        sessions = []
+        for session_dir in checkpoint_base.iterdir():
+            if session_dir.is_dir():
+                checkpoint_file = session_dir / "checkpoint.json"
+                if checkpoint_file.exists():
+                    try:
+                        data = json.loads(checkpoint_file.read_text(encoding="utf-8"))
+                        sessions.append(SessionInfo(
+                            session_id=session_dir.name,
+                            user_query=data.get("user_query", "")[:100] + "..." if len(data.get("user_query", "")) > 100 else data.get("user_query", ""),
+                            status=data.get("status", "unknown"),
+                            completed_dossiers=len(data.get("completed_dossiers", [])),
+                            total_points=len(data.get("research_plan", [])),
+                            last_modified=datetime.fromtimestamp(checkpoint_file.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+                        ))
+                    except Exception as e:
+                        logger.warning(f"Failed to parse checkpoint {session_dir.name}: {e}")
 
         # Nach Änderungsdatum sortieren (neueste zuerst)
-        latest_file = max(md_files, key=lambda f: f.stat().st_mtime)
+        sessions.sort(key=lambda s: s.last_modified, reverse=True)
 
-        content = latest_file.read_text(encoding="utf-8")
+        return SessionListResponse(sessions=sessions)
 
-        logger.info(f"[RECOVERY] Loaded synthesis from {latest_file.name} ({len(content)} chars)")
+    except Exception as e:
+        logger.error(f"[SESSIONS] Failed to list sessions: {e}")
+        return SessionListResponse(sessions=[])
 
-        return SynthesisRecoveryResponse(
+
+@router.get("/research/session/{session_id}", response_model=SessionCheckpointResponse)
+async def get_session_checkpoint(session_id: str):
+    """Lädt den Checkpoint einer spezifischen Session."""
+    try:
+        checkpoint_file = Path(__file__).parent.parent.parent / "research_checkpoints" / session_id / "checkpoint.json"
+
+        if not checkpoint_file.exists():
+            return SessionCheckpointResponse(
+                success=False,
+                error=f"Session {session_id} nicht gefunden"
+            )
+
+        data = json.loads(checkpoint_file.read_text(encoding="utf-8"))
+
+        logger.info(f"[RECOVERY] Loaded session {session_id}: {len(data.get('completed_dossiers', []))} dossiers")
+
+        return SessionCheckpointResponse(
             success=True,
-            final_document=content,
-            filename=latest_file.name
+            session_id=session_id,
+            user_query=data.get("user_query"),
+            research_plan=data.get("research_plan"),
+            completed_dossiers=data.get("completed_dossiers"),
+            remaining_points=data.get("remaining_points"),
+            status=data.get("status")
         )
 
     except Exception as e:
-        logger.error(f"[RECOVERY] Failed to load synthesis: {e}")
-        return SynthesisRecoveryResponse(
+        logger.error(f"[RECOVERY] Failed to load session {session_id}: {e}")
+        return SessionCheckpointResponse(
             success=False,
-            error=str(e)
+            error="Session konnte nicht geladen werden"
         )
+
+
+# Legacy endpoint für alte Frontend-Versionen
+@router.get("/research/latest-synthesis")
+async def get_latest_synthesis():
+    """Legacy: Holt die neueste Session."""
+    sessions_response = await list_sessions()
+    if sessions_response.sessions:
+        latest = sessions_response.sessions[0]
+        return await get_session_checkpoint(latest.session_id)
+    return SessionCheckpointResponse(success=False, error="Keine Sessions gefunden")
+
+
+# === RESUME SESSION ENDPOINT ===
+
+class ResumeRequest(BaseModel):
+    """Request für Session Resume."""
+    session_id: str = Field(..., description="Session ID zum Fortsetzen", max_length=50)
+    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", max_length=100)
+    final_model: str = Field("qwen/qwen3-vl-235b-a22b-instruct", max_length=100)
+
+
+@router.post("/research/resume")
+async def resume_session(request: ResumeRequest):
+    """
+    Setzt eine unterbrochene Session fort.
+
+    Lädt den Checkpoint und führt die Pipeline ab remaining_points fort.
+    """
+    # Checkpoint laden
+    checkpoint_file = Path(__file__).parent.parent.parent / "research_checkpoints" / request.session_id / "checkpoint.json"
+
+    if not checkpoint_file.exists():
+        return {"error": f"Session {request.session_id} nicht gefunden"}
+
+    checkpoint = json.loads(checkpoint_file.read_text(encoding="utf-8"))
+
+    remaining_points = checkpoint.get("remaining_points", [])
+    if not remaining_points:
+        return {"error": "Keine ausstehenden Punkte - Session ist bereits fertig"}
+
+    # Context State für Deep Research bauen
+    context_state = {
+        "user_query": checkpoint.get("user_query", ""),
+        "clarification_questions": [],
+        "clarification_answers": [],
+        "overview_queries": [],
+        "overview_results": {},
+        "research_plan": remaining_points,  # NUR die verbleibenden Punkte!
+        "_resumed_from": request.session_id,
+        "_completed_dossiers": checkpoint.get("completed_dossiers", []),
+        "_accumulated_learnings": checkpoint.get("accumulated_learnings", [])
+    }
+
+    # Deep Research Request bauen
+    deep_request = DeepResearchRequest(
+        context_state=context_state,
+        session_id=request.session_id,
+        api_key=request.api_key,
+        work_model=request.work_model,
+        final_model=request.final_model
+    )
+
+    # Deep Research starten (gibt StreamingResponse zurück)
+    return await run_deep_research(deep_request)
+
+
+# === ACADEMIC MODE ENDPOINT ===
+
+class AcademicResearchRequest(BaseModel):
+    """Request für Academic Deep Research Pipeline."""
+    context_state: dict = Field(..., description="Context State mit academic_bereiche")
+    session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
+    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="Modell für Vorarbeit", max_length=100)
+    final_model: str = Field("anthropic/claude-sonnet-4.5", description="Modell für Meta-Synthesis", max_length=100)
+
+
+@router.post("/research/academic")
+async def research_academic(request: AcademicResearchRequest):
+    """
+    Academic Deep Research Pipeline - STREAMING.
+
+    UNTERSCHIED ZU NORMAL MODE:
+    - Plan hat BEREICHE statt flacher Liste
+    - Bereiche werden SEQUENZIELL abgearbeitet (Key Learnings fließen nur INNERHALB)
+    - Nach allen Bereichen: META-SYNTHESE (Querverbindungen, Toulmin, Evidenz-Grading)
+
+    Events:
+    - {"type": "bereich_start", "bereich_title": "...", "bereich_number": N, "total_bereiche": M}
+    - {"type": "point_complete", ...} (wie Normal Mode)
+    - {"type": "bereich_complete", "bereich_title": "...", "synthese": "..."}
+    - {"type": "meta_synthesis_start", ...}
+    - {"type": "done", "data": {...}}
+    """
+    import json
+    import time
+    import re
+    import requests as http_requests
+    from lutum.researcher.search import _execute_all_searches_async, _close_google_session
+    from lutum.scrapers.camoufox_scraper import scrape_urls_batch
+    from lutum.researcher.prompts import (
+        build_think_prompt,
+        parse_think_response,
+        build_pick_urls_prompt,
+        parse_pick_urls_response,
+        build_dossier_prompt,
+        parse_dossier_response,
+    )
+    from lutum.researcher.prompts.bereichs_synthesis import (
+        build_bereichs_synthesis_prompt,
+        BEREICHS_SYNTHESIS_MODEL,
+        BEREICHS_SYNTHESIS_TIMEOUT,
+    )
+    from lutum.researcher.prompts.academic_conclusion import (
+        build_academic_conclusion_prompt,
+        ACADEMIC_CONCLUSION_MODEL,
+        ACADEMIC_CONCLUSION_TIMEOUT,
+    )
+
+    logger.info("Academic Research Pipeline started")
+    start_time = time.time()
+
+    # API Key setzen
+    set_api_key(request.api_key)
+
+    MODEL_FAST = request.work_model
+    MODEL_META = request.final_model
+
+    def call_llm(system_prompt: str, user_prompt: str, model: str = MODEL_FAST, timeout: int = 60, max_tokens: int = 8000) -> Optional[str]:
+        """Ruft OpenRouter LLM auf."""
+        try:
+            response = http_requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {get_api_key()}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "max_tokens": max_tokens
+                },
+                timeout=timeout
+            )
+            result = response.json()
+            if "choices" in result:
+                return result["choices"][0]["message"]["content"]
+            logger.error(f"LLM error: {result}")
+            return None
+        except Exception as e:
+            logger.error(f"LLM call failed: {e}")
+            return None
+
+    async def scrape_urls_parallel(urls: list[str], timeout: int = 45) -> dict[str, str]:
+        """Scraped URLs."""
+        return await scrape_urls_batch(urls, timeout=timeout)
+
+    async def generate():
+        try:
+            # Context laden
+            context_state = request.context_state
+            user_query = context_state.get("user_query", "")
+            academic_bereiche = context_state.get("academic_bereiche", {})
+
+            if not academic_bereiche:
+                yield json.dumps({"type": "error", "message": "Keine Academic Bereiche im Context"}) + "\n"
+                return
+
+            total_bereiche = len(academic_bereiche)
+            total_points = sum(len(points) for points in academic_bereiche.values())
+
+            yield json.dumps({
+                "type": "status",
+                "message": f"Academic Mode: {total_bereiche} Bereiche mit {total_points} Punkten"
+            }) + "\n"
+
+            # === GLOBALE TRACKING ===
+            source_registry: dict[int, str] = {}
+            source_counter = 1
+            all_bereichs_synthesen = []
+            global_point_index = 0
+
+            def renumber_citations(text: str, local_urls: list[str], start_num: int) -> tuple[str, int]:
+                """Ersetzt lokale [N] durch globale Nummern."""
+                result = text
+                current_num = start_num
+                local_nums = set(int(m) for m in re.findall(r'\[(\d+)\]', text))
+                local_to_global = {}
+                for local_num in sorted(local_nums):
+                    local_to_global[local_num] = current_num
+                    current_num += 1
+                for local_num in sorted(local_nums, reverse=True):
+                    global_num = local_to_global[local_num]
+                    result = re.sub(rf'\[{local_num}\]', f'[{global_num}]', result)
+                    if local_num - 1 < len(local_urls):
+                        source_registry[global_num] = local_urls[local_num - 1]
+                return result, current_num
+
+            # === HAUPTSCHLEIFE: Jeden BEREICH abarbeiten ===
+            for bereich_index, (bereich_titel, bereich_punkte) in enumerate(academic_bereiche.items(), 1):
+
+                yield json.dumps({
+                    "type": "bereich_start",
+                    "bereich_title": bereich_titel,
+                    "bereich_number": bereich_index,
+                    "total_bereiche": total_bereiche,
+                    "points_in_bereich": len(bereich_punkte)
+                }) + "\n"
+
+                # Key Learnings NUR für diesen Bereich (nicht bereichsübergreifend!)
+                bereich_learnings = []
+                bereich_dossiers = []
+                bereich_sources = []
+
+                # === Jeden Punkt im Bereich abarbeiten ===
+                for punkt_index, current_point in enumerate(bereich_punkte, 1):
+                    global_point_index += 1
+                    punkt_label = f"[{bereich_index}.{punkt_index}]"
+
+                    yield json.dumps({
+                        "type": "status",
+                        "message": f"{punkt_label} {current_point[:50]}..."
+                    }) + "\n"
+
+                    # --- STEP A: Think ---
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} Entwickle Suchstrategie..."}) + "\n"
+
+                    system_prompt, user_prompt = build_think_prompt(
+                        user_query=user_query,
+                        current_point=current_point,
+                        previous_learnings=bereich_learnings if bereich_learnings else None
+                    )
+
+                    think_response = call_llm(system_prompt, user_prompt, timeout=60)
+
+                    if not think_response:
+                        yield json.dumps({
+                            "type": "point_complete",
+                            "point_title": current_point,
+                            "point_number": global_point_index,
+                            "total_points": total_points,
+                            "skipped": True,
+                            "skip_reason": "Think fehlgeschlagen",
+                            "key_learnings": "Übersprungen"
+                        }) + "\n"
+                        continue
+
+                    thinking_block, search_queries = parse_think_response(think_response)
+
+                    if not search_queries:
+                        yield json.dumps({
+                            "type": "point_complete",
+                            "point_title": current_point,
+                            "point_number": global_point_index,
+                            "total_points": total_points,
+                            "skipped": True,
+                            "skip_reason": "Keine Suchqueries",
+                            "key_learnings": "Übersprungen"
+                        }) + "\n"
+                        continue
+
+                    # --- STEP B: Search ---
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} Durchsuche Google..."}) + "\n"
+
+                    search_results_dict = await _execute_all_searches_async(search_queries, results_per_query=20)
+                    await _close_google_session()
+
+                    if not search_results_dict:
+                        continue
+
+                    # Formatieren
+                    formatted_results = []
+                    result_counter = 1
+                    for query, results in search_results_dict.items():
+                        for result in results:
+                            formatted_results.append(f"[{result_counter}] {result.get('title', '')}")
+                            formatted_results.append(f"    URL: {result.get('url', '')}")
+                            formatted_results.append(f"    Snippet: {result.get('snippet', '')[:200]}")
+                            formatted_results.append("")
+                            result_counter += 1
+                    search_results_text = "\n".join(formatted_results)
+
+                    # --- STEP C: Pick URLs ---
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} Wähle Quellen..."}) + "\n"
+
+                    system_prompt, user_prompt = build_pick_urls_prompt(
+                        user_query=user_query,
+                        current_point=current_point,
+                        thinking_block=thinking_block,
+                        search_results=search_results_text,
+                        previous_learnings=bereich_learnings if bereich_learnings else None
+                    )
+
+                    pick_response = call_llm(system_prompt, user_prompt, timeout=60)
+                    selected_urls = parse_pick_urls_response(pick_response) if pick_response else []
+
+                    if not selected_urls:
+                        continue
+
+                    yield json.dumps({
+                        "type": "sources",
+                        "urls": selected_urls,
+                        "message": f"{punkt_label} {len(selected_urls)} Quellen"
+                    }) + "\n"
+
+                    bereich_sources.extend(selected_urls)
+
+                    # --- STEP D: Scrape ---
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} Lese Quellen..."}) + "\n"
+
+                    scraped_contents = await scrape_urls_parallel(selected_urls)
+
+                    scraped_text_parts = []
+                    for url, content in scraped_contents.items():
+                        if content and len(content.strip()) > 100:
+                            truncated = content[:10000] + "..." if len(content) > 10000 else content
+                            scraped_text_parts.append(f"=== QUELLE: {url} ===\n{truncated}\n")
+
+                    scraped_content = "\n".join(scraped_text_parts)
+
+                    if not scraped_content:
+                        continue
+
+                    # --- STEP E: Dossier ---
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} Erstelle Dossier..."}) + "\n"
+
+                    system_prompt, user_prompt = build_dossier_prompt(
+                        user_query=user_query,
+                        current_point=current_point,
+                        thinking_block=thinking_block,
+                        scraped_content=scraped_content
+                    )
+
+                    dossier_response = call_llm(system_prompt, user_prompt, timeout=120)
+
+                    if not dossier_response:
+                        continue
+
+                    dossier_text, key_learnings, citations = parse_dossier_response(dossier_response)
+
+                    # Globale Renummerierung
+                    dossier_urls = list(scraped_contents.keys())
+                    dossier_text, source_counter = renumber_citations(dossier_text, dossier_urls, source_counter)
+                    if key_learnings:
+                        key_learnings, _ = renumber_citations(key_learnings, dossier_urls, source_counter - len(dossier_urls))
+
+                    bereich_dossiers.append({
+                        "point": current_point,
+                        "dossier": dossier_text,
+                        "sources": dossier_urls
+                    })
+
+                    if key_learnings:
+                        bereich_learnings.append(key_learnings)
+
+                    yield json.dumps({
+                        "type": "point_complete",
+                        "point_title": current_point,
+                        "point_number": global_point_index,
+                        "total_points": total_points,
+                        "key_learnings": key_learnings or "Keine Key Learnings",
+                        "dossier_full": dossier_text,
+                        "sources": dossier_urls
+                    }) + "\n"
+
+                    await asyncio.sleep(0.2)
+
+                # === BEREICHS-SYNTHESE (ECHTER LLM CALL!) ===
+                if bereich_dossiers:
+                    yield json.dumps({
+                        "type": "status",
+                        "message": f"🧠 Synthese für Bereich: {bereich_titel}..."
+                    }) + "\n"
+
+                    # Echter LLM Call für Bereichs-Synthese
+                    system_prompt, user_prompt = build_bereichs_synthesis_prompt(
+                        user_query=user_query,
+                        bereich_titel=bereich_titel,
+                        bereich_dossiers=bereich_dossiers
+                    )
+
+                    bereich_synthese = await asyncio.to_thread(
+                        call_llm,
+                        system_prompt,
+                        user_prompt,
+                        BEREICHS_SYNTHESIS_MODEL,
+                        BEREICHS_SYNTHESIS_TIMEOUT,
+                        16000
+                    )
+
+                    if not bereich_synthese:
+                        # Fallback: Dossiers zusammenkleben
+                        bereich_synthese = f"## {bereich_titel}\n\n"
+                        for d in bereich_dossiers:
+                            bereich_synthese += f"### {d['point']}\n\n{d['dossier']}\n\n"
+
+                    # Renummerierung für diesen Bereich
+                    bereich_synthese, source_counter = renumber_citations(
+                        bereich_synthese, bereich_sources, source_counter
+                    )
+
+                    all_bereichs_synthesen.append({
+                        "bereich_titel": bereich_titel,
+                        "synthese": bereich_synthese,
+                        "sources": bereich_sources,
+                        "sources_count": len(bereich_sources),
+                        "dossiers": bereich_dossiers
+                    })
+
+                    yield json.dumps({
+                        "type": "bereich_complete",
+                        "bereich_title": bereich_titel,
+                        "bereich_number": bereich_index,
+                        "total_bereiche": total_bereiche,
+                        "dossiers_count": len(bereich_dossiers),
+                        "sources_count": len(bereich_sources),
+                        "synthese_preview": bereich_synthese[:500] + "..." if len(bereich_synthese) > 500 else bereich_synthese
+                    }) + "\n"
+
+                await asyncio.sleep(0.3)
+
+            # === ACADEMIC CONCLUSION (DER MAGISCHE FINALE CALL!) ===
+            if all_bereichs_synthesen:
+                yield json.dumps({
+                    "type": "meta_synthesis_start",
+                    "message": "🔮 Academic Conclusion: Finde Querverbindungen, Muster, die Lösung...",
+                    "bereiche_count": len(all_bereichs_synthesen),
+                    "total_sources": len(source_registry)
+                }) + "\n"
+
+                await asyncio.sleep(0.2)
+
+                # DER MAGISCHE CALL - bekommt User-Frage + alle Bereichs-Synthesen
+                system_prompt, user_prompt = build_academic_conclusion_prompt(
+                    user_query=user_query,
+                    bereichs_synthesen=all_bereichs_synthesen
+                )
+
+                # Academic Conclusion in Thread für non-blocking
+                academic_conclusion = await asyncio.to_thread(
+                    call_llm,
+                    system_prompt,
+                    user_prompt,
+                    ACADEMIC_CONCLUSION_MODEL,
+                    ACADEMIC_CONCLUSION_TIMEOUT,
+                    32000
+                )
+
+                if not academic_conclusion:
+                    academic_conclusion = "# Conclusion\n\nConclusion-Synthese fehlgeschlagen."
+
+                # === FINAL DOCUMENT ZUSAMMENBAUEN ===
+                final_document = f"# {user_query[:100]}{'...' if len(user_query) > 100 else ''}\n\n"
+                final_document += "---\n\n"
+
+                # Alle Bereichs-Synthesen einfügen
+                for i, s in enumerate(all_bereichs_synthesen, 1):
+                    final_document += f"# Bereich {i}: {s['bereich_titel']}\n\n"
+                    final_document += s['synthese']
+                    final_document += "\n\n---\n\n"
+
+                # Academic Conclusion als BESONDERER Bereich (wird im Frontend farblich markiert)
+                final_document += "# 🔮 QUERVERBINDUNGEN & CONCLUSION\n\n"
+                final_document += academic_conclusion
+                final_document += "\n\n---\n\n"
+
+                # Quellenverzeichnis (NUR EINMAL am Ende!)
+                final_document += "# 📎 QUELLENVERZEICHNIS\n\n"
+                for num, url in sorted(source_registry.items()):
+                    final_document += f"[{num}] {url}\n"
+
+            else:
+                final_document = "Keine Bereiche erfolgreich recherchiert."
+
+            # === DONE ===
+            duration = time.time() - start_time
+
+            yield json.dumps({"type": "status", "message": f"Academic Research abgeschlossen in {duration:.1f}s"}) + "\n"
+
+            yield json.dumps({
+                "type": "done",
+                "data": {
+                    "final_document": final_document,
+                    "total_points": global_point_index,
+                    "total_sources": len(source_registry),
+                    "total_bereiche": total_bereiche,
+                    "duration_seconds": duration,
+                    "source_registry": source_registry,
+                    "error": None
+                }
+            }) + "\n"
+
+        except Exception as e:
+            logger.error(f"Academic Research failed: {e}", exc_info=True)
+            yield json.dumps({"type": "error", "message": "Academic research failed. Please try again."}) + "\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson"
+    )

@@ -16,7 +16,7 @@ from lutum.core.api_config import get_api_key
 logger = get_logger(__name__)
 
 # === CONFIG ===
-MODEL = "google/gemini-3-flash-preview"
+MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 
 # === PROMPT ===

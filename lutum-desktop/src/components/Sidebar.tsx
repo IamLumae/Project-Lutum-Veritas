@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from "react";
 import { Session } from "../stores/sessions";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import logoImg from "../assets/logo.png";
+import { t, type Language } from "../i18n/translations";
 
 /**
  * Typewriter Hook - animiert Text Buchstabe für Buchstabe.
@@ -17,8 +18,9 @@ function useTypewriter(text: string, speed: number = 50): string {
   const prevTextRef = useRef("");
 
   useEffect(() => {
-    // Nur animieren wenn sich der Text geändert hat UND nicht "Recherche läuft..."
-    if (text === prevTextRef.current || text === "Recherche läuft..." || text === "Neue Recherche") {
+    // Don't animate for status texts or new research placeholder
+    const skipTexts = ["Recherche läuft...", "Neue Recherche", "Research running...", "New Research"];
+    if (text === prevTextRef.current || skipTexts.includes(text)) {
       setDisplayText(text);
       return;
     }
@@ -101,6 +103,7 @@ interface SidebarProps {
   onNewSession: () => void;
   onDeleteSession: (id: string) => void;
   onRenameSession: (id: string, newTitle: string) => void;
+  language: Language;
 }
 
 export function Sidebar({
@@ -110,7 +113,9 @@ export function Sidebar({
   onNewSession,
   onDeleteSession,
   onRenameSession,
+  language,
 }: SidebarProps) {
+  const lang = language;
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -176,19 +181,19 @@ export function Sidebar({
           className="w-full bg-transparent hover:bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-4 py-3 flex items-center gap-3 transition-colors"
         >
           <span className="text-lg">+</span>
-          <span>Neue Recherche</span>
+          <span>{t('newResearch', lang)}</span>
         </button>
       </div>
 
       {/* Session List */}
       <div className="flex-1 overflow-y-auto px-2 min-h-0">
         <div className="text-xs text-[var(--text-secondary)] px-3 py-2 font-medium">
-          Deine Recherchen
+          {t('yourResearches', lang)}
         </div>
 
         {sessions.length === 0 ? (
           <p className="text-[var(--text-secondary)] text-sm text-center p-4">
-            Noch keine Recherchen
+            {t('noResearchesYet', lang)}
           </p>
         ) : (
           <div className="space-y-0.5">
@@ -251,13 +256,13 @@ export function Sidebar({
             onClick={handleStartRename}
             className="w-full px-4 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors block"
           >
-            Umbenennen
+            {t('rename', lang)}
           </button>
           <button
             onClick={handleDelete}
             className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/20 transition-colors block"
           >
-            Löschen
+            {t('delete', lang)}
           </button>
         </div>
       )}

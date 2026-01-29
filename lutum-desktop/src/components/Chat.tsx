@@ -11,6 +11,7 @@ import { InputBar } from "./InputBar";
 import { Settings } from "./Settings";
 import { useBackend } from "../hooks/useBackend";
 import { initDarkMode, loadSettings } from "../stores/settings";
+import { t, type Language } from "../i18n/translations";
 import {
   SessionsState,
   Session,
@@ -31,7 +32,7 @@ export function Chat() {
   const [sessionsState, setSessionsState] = useState<SessionsState>(loadSessions);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const { loading, error, connected, checkHealth, runPipeline, createPlan, revisePlan, runDeepResearch, recoverSynthesis } = useBackend();
+  const { loading, error, connected, checkHealth, runPipeline, createPlan, revisePlan, runDeepResearch, runAcademicResearch, recoverSession, resumeSession } = useBackend();
 
   // Live-Status vom Streaming (ersetzt SSE)
   const [currentStatus, setCurrentStatus] = useState<string>("");
@@ -43,12 +44,14 @@ export function Chat() {
   // Settings State (Lifted for UI Controls)
   const [modelSize, setModelSize] = useState<'small' | 'large'>('small');
   const [academicMode, setAcademicMode] = useState(false);
+  const [language, setLanguage] = useState<Language>('de');
 
   // Init Settings State
   useEffect(() => {
     const s = loadSettings();
     setModelSize(s.modelSize);
     setAcademicMode(s.academicMode);
+    setLanguage(s.language);
   }, [settingsOpen]); // Refresh if settings modal changed something
 
   // Helper: Persist Academic Mode
@@ -62,26 +65,26 @@ export function Chat() {
   // EXPORT HANDLERS - Using Tauri native APIs
   const handleExportMD = async () => {
     if (!activeSession?.messages) {
-      alert("Keine Session aktiv.");
+      alert(t('noSessionActive', language));
       return;
     }
 
     if (activeSession.phase !== 'done') {
-      alert(`Export nur möglich wenn Recherche abgeschlossen ist.\nAktueller Status: ${activeSession.phase}`);
+      alert(t('exportOnlyWhenDone', language) + activeSession.phase);
       return;
     }
 
-    // Finde die LÄNGSTE Assistant-Message (das ist die Synthesis, nicht die Summary)
+    // Find the LONGEST assistant message (that's the synthesis, not the summary)
     const assistantMessages = activeSession.messages.filter(
       m => m.role === 'assistant' && (!m.type || m.type === 'text')
     );
 
     if (assistantMessages.length === 0) {
-      alert("Keine exportierbare Nachricht gefunden.");
+      alert(t('noExportableMessage', language));
       return;
     }
 
-    // Die längste Message ist die Synthesis
+    // The longest message is the synthesis
     const finalMsg = assistantMessages.reduce((longest, current) =>
       current.content.length > longest.content.length ? current : longest
     );
@@ -95,31 +98,31 @@ export function Chat() {
 
       if (filePath) {
         await writeTextFile(filePath, finalMsg.content);
-        alert("Markdown erfolgreich exportiert!");
+        alert(t('mdExportSuccess', language));
       }
     } catch (err) {
-      alert(`Export fehlgeschlagen: ${err}`);
+      alert(t('exportFailed', language) + err);
     }
   };
 
   const handleExportPDF = async () => {
     if (!activeSession?.messages) {
-      alert("Keine Session aktiv.");
+      alert(t('noSessionActive', language));
       return;
     }
 
     if (activeSession.phase !== 'done') {
-      alert(`Export nur möglich wenn Recherche abgeschlossen ist.\nAktueller Status: ${activeSession.phase}`);
+      alert(t('exportOnlyWhenDone', language) + activeSession.phase);
       return;
     }
 
-    // Finde die LÄNGSTE Assistant-Message (das ist die Synthesis)
+    // Find the LONGEST assistant message (that's the synthesis)
     const assistantMessages = activeSession.messages.filter(
       m => m.role === 'assistant' && (!m.type || m.type === 'text')
     );
 
     if (assistantMessages.length === 0) {
-      alert("Keine exportierbare Nachricht gefunden.");
+      alert(t('noExportableMessage', language));
       return;
     }
 
@@ -349,9 +352,9 @@ export function Chat() {
       const uint8Array = new Uint8Array(pdfArrayBuffer);
 
       await writeFile(filePath, uint8Array);
-      alert("PDF erfolgreich exportiert!");
+      alert(t('pdfExportSuccess', language));
     } catch (err) {
-      alert(`PDF Export fehlgeschlagen: ${err}`);
+      alert(t('pdfExportFailed', language) + err);
     }
   };
 
@@ -510,7 +513,7 @@ export function Chat() {
 
       // === PHASE: INITIAL → Pipeline Step 1-3 ===
       if (phase === "initial") {
-        updateSession(sessionId, { title: "Recherche läuft...", phase: "clarifying" });
+        updateSession(sessionId, { title: t('researchRunning', language), phase: "clarifying" });
 
         // Pipeline mit Status-Callback für Live-Updates und Sources-Callback für URLs
         const settings = loadSettings();
@@ -542,8 +545,8 @@ export function Chat() {
           updateSession(sessionId, { title: pipelineResult.session_title });
         }
 
-        // Assistant Message mit Rückfragen
-        const responseText = pipelineResult?.response || pipelineResult?.error || "Fehler bei der Recherche";
+        // Assistant Message with follow-up questions
+        const responseText = pipelineResult?.response || pipelineResult?.error || t('researchError', language);
         const assistantMsg: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
@@ -581,28 +584,32 @@ export function Chat() {
           academicMode
         );
 
-        if (planResult?.plan_points && planResult.plan_points.length > 0) {
-          // Plan-Message mit speziellem Typ
+        // Check für Normal Mode (plan_points) ODER Academic Mode (academic_bereiche)
+        const hasNormalPlan = planResult?.plan_points && planResult.plan_points.length > 0;
+        const hasAcademicPlan = planResult?.academic_bereiche && Object.keys(planResult.academic_bereiche).length > 0;
+
+        if (hasNormalPlan || hasAcademicPlan) {
+          // Plan message with special type
           const planMsg: Message = {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: `**Recherche-Plan erstellt:**\n\n${planResult.plan_text}\n\n_Sag mir, falls ich ihn ändern soll._`,
+            content: t('planCreated', language) + planResult.plan_text + (language === 'de' ? '\n\n_Sag mir, falls ich ihn ändern soll._' : '\n\n_Let me know if you want to change it._'),
             timestamp: new Date().toISOString(),
             type: "plan",
           };
           addMessage(sessionId, planMsg);
 
-          // Context State mit Plan updaten
+          // Update context state with plan
           updateSession(sessionId, {
             contextState: planResult.context_state,
             phase: "planning",
           });
         } else {
-          // Fehler
+          // Error
           const errorMsg: Message = {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: planResult?.error || "Plan konnte nicht erstellt werden.",
+            content: planResult?.error || t('planFailed', language),
             timestamp: new Date().toISOString(),
           };
           addMessage(sessionId, errorMsg);
@@ -618,11 +625,15 @@ export function Chat() {
         const settings = loadSettings();
         const reviseResult = await revisePlan(ctx, content, settings.apiKey, sessionId, modelSize, academicMode);
 
-        if (reviseResult?.plan_points && reviseResult.plan_points.length > 0) {
+        // Check für Normal Mode (plan_points) ODER Academic Mode (academic_bereiche)
+        const hasNormalPlan = reviseResult?.plan_points && reviseResult.plan_points.length > 0;
+        const hasAcademicPlan = reviseResult?.academic_bereiche && Object.keys(reviseResult.academic_bereiche).length > 0;
+
+        if (hasNormalPlan || hasAcademicPlan) {
           const planMsg: Message = {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: `**Recherche-Plan überarbeitet (v${reviseResult.context_state.plan_version}):**\n\n${reviseResult.plan_text}\n\n_Sag mir, falls ich ihn noch ändern soll._`,
+            content: t('planRevised', language) + reviseResult.context_state.plan_version + t('planRevisedSuffix', language) + reviseResult.plan_text + (language === 'de' ? '\n\n_Sag mir, falls ich ihn noch ändern soll._' : '\n\n_Let me know if you want to change it more._'),
             timestamp: new Date().toISOString(),
             type: "plan",
           };
@@ -632,7 +643,7 @@ export function Chat() {
           const errorMsg: Message = {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: reviseResult?.error || "Plan konnte nicht überarbeitet werden.",
+            content: reviseResult?.error || t('planFailed', language),
             timestamp: new Date().toISOString(),
           };
           addMessage(sessionId, errorMsg);
@@ -652,17 +663,150 @@ export function Chat() {
     // Phase auf "researching" setzen
     updateSession(sessionId, { phase: "researching" });
 
-    // Start-Message
+    const settings = loadSettings();
+
+    // === ACADEMIC MODE: Hierarchische Bereiche mit Meta-Synthese ===
+    if (academicMode && ctx.academic_bereiche && Object.keys(ctx.academic_bereiche).length > 0) {
+      const totalBereiche = Object.keys(ctx.academic_bereiche).length;
+      const totalPunkte = Object.values(ctx.academic_bereiche).reduce((sum, pts) => sum + pts.length, 0);
+
+      // Start message für Academic Mode
+      const startMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: language === 'de'
+          ? `🎓 **Academic Deep Research gestartet**\n\n${totalBereiche} Bereiche mit insgesamt ${totalPunkte} Punkten.\n\n_Nach jedem Bereich siehst du die Erkenntnisse. Am Ende folgt die Meta-Synthese mit Querverbindungen._`
+          : `🎓 **Academic Deep Research started**\n\n${totalBereiche} areas with ${totalPunkte} points total.\n\n_You will see findings after each area. At the end comes the meta-synthesis with cross-connections._`,
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(sessionId, startMsg);
+
+      // Academic Research ausführen
+      const result = await runAcademicResearch(
+        ctx,
+        settings.apiKey,
+        sessionId,
+        // onStatus
+        (status) => setCurrentStatus(status),
+        // onSources
+        (urls) => {
+          const sourcesMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `📚 ${urls.length} ${language === 'de' ? 'Quellen gefunden' : 'sources found'}`,
+            timestamp: new Date().toISOString(),
+            type: "sources",
+            sources: urls,
+          };
+          addMessage(sessionId, sourcesMsg);
+        },
+        // onPointComplete
+        (event) => {
+          const pointMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: event.keyLearnings,
+            timestamp: new Date().toISOString(),
+            type: "point_summary",
+            pointTitle: event.pointTitle,
+            pointNumber: event.pointNumber,
+            totalPoints: event.totalPoints,
+            dossierFull: event.dossierFull,
+            skipped: event.skipped,
+            skipReason: event.skipReason,
+          };
+          addMessage(sessionId, pointMsg);
+        },
+        // onBereichStart
+        (event) => {
+          const bereichMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: language === 'de'
+              ? `📂 **Bereich ${event.bereichNumber}/${event.totalBereiche}: ${event.bereichTitle}**\n\n_${event.pointsInBereich} Punkte in diesem Bereich_`
+              : `📂 **Area ${event.bereichNumber}/${event.totalBereiche}: ${event.bereichTitle}**\n\n_${event.pointsInBereich} points in this area_`,
+            timestamp: new Date().toISOString(),
+          };
+          addMessage(sessionId, bereichMsg);
+        },
+        // onBereichComplete
+        (event) => {
+          const completeMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: language === 'de'
+              ? `✅ **Bereich abgeschlossen: ${event.bereichTitle}**\n\n${event.dossiersCount} Dossiers aus ${event.sourcesCount} Quellen`
+              : `✅ **Area complete: ${event.bereichTitle}**\n\n${event.dossiersCount} dossiers from ${event.sourcesCount} sources`,
+            timestamp: new Date().toISOString(),
+          };
+          addMessage(sessionId, completeMsg);
+        },
+        // onMetaSynthesisStart
+        (event) => {
+          const metaMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: language === 'de'
+              ? `🔬 **Meta-Synthese startet**\n\nFinde Querverbindungen zwischen ${event.bereicheCount} Bereichen aus ${event.totalSources} Quellen...\n\n_Das kann einige Minuten dauern._`
+              : `🔬 **Meta-Synthesis starting**\n\nFinding cross-connections between ${event.bereicheCount} areas from ${event.totalSources} sources...\n\n_This may take a few minutes._`,
+            timestamp: new Date().toISOString(),
+            type: "synthesis_waiting",
+          };
+          addMessage(sessionId, metaMsg);
+        },
+        settings.workModel,
+        settings.finalModel
+      );
+
+      // Ergebnis verarbeiten
+      if (result?.final_document) {
+        const finalMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: result.final_document,
+          timestamp: new Date().toISOString(),
+        };
+        addMessage(sessionId, finalMsg);
+
+        // Summary
+        const summaryMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: language === 'de'
+            ? `✨ **Academic Research abgeschlossen**\n\n- ${result.total_bereiche} Bereiche\n- ${result.total_points} Punkte\n- ${result.total_sources} Quellen\n- Dauer: ${Math.round(result.duration_seconds / 60)} Minuten`
+            : `✨ **Academic Research complete**\n\n- ${result.total_bereiche} areas\n- ${result.total_points} points\n- ${result.total_sources} sources\n- Duration: ${Math.round(result.duration_seconds / 60)} minutes`,
+          timestamp: new Date().toISOString(),
+        };
+        addMessage(sessionId, summaryMsg);
+
+        // Source Registry wird NICHT mehr separat angezeigt - ist jetzt im final_document eingebaut
+
+        updateSession(sessionId, { phase: "done" });
+      } else if (result?.error) {
+        const errorMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: t('researchErrorPrefix', language) + result.error,
+          timestamp: new Date().toISOString(),
+        };
+        addMessage(sessionId, errorMsg);
+        updateSession(sessionId, { phase: "planning" });
+      }
+
+      return;
+    }
+
+    // === NORMAL MODE: Flache Liste ===
+    // Start message
     const startMsg: Message = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: `**Deep Research gestartet**\n\nIch arbeite jetzt ${ctx.research_plan.length} Punkte ab. Das kann einige Minuten dauern.\n\n_Du siehst nach jedem Punkt die Erkenntnisse._`,
+      content: t('deepResearchStarted', language) + ctx.research_plan.length + (language === 'de' ? ' Punkte ab. Das kann einige Minuten dauern.\n\n_Du siehst nach jedem Punkt die Erkenntnisse._' : ' points. This may take a few minutes.\n\n_You will see the findings after each point._'),
       timestamp: new Date().toISOString(),
     };
     addMessage(sessionId, startMsg);
 
     // Deep Research ausführen
-    const settings = loadSettings();
     const result = await runDeepResearch(
       ctx,
       settings.apiKey,
@@ -671,12 +815,12 @@ export function Chat() {
       (status) => {
         setCurrentStatus(status);
       },
-      // onSources: Quellen-Box für jeden Punkt
+      // onSources: Sources box for each point
       (urls) => {
         const sourcesMsg: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: `Analysiere ${urls.length} Quellen...`,
+          content: t('analyzing', language) + urls.length + (language === 'de' ? ' Quellen...' : ' sources...'),
           timestamp: new Date().toISOString(),
           type: "sources",
           sources: urls,
@@ -700,12 +844,12 @@ export function Chat() {
         };
         addMessage(sessionId, pointMsg);
       },
-      // onSynthesisStart: Final Synthesis beginnt (lange Wartezeit)
+      // onSynthesisStart: Final Synthesis starts (long wait)
       (event) => {
         const synthMsg: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: `**Final Synthesis startet**\n\nKombiniere ${event.dossierCount} Dossiers aus ${event.totalSources} Quellen.\nGeschätzte Dauer: ~${event.estimatedMinutes} Minuten.\n\n_Bitte nicht schließen - das dauert einen Moment._`,
+          content: t('finalSynthesisStarting', language) + event.dossierCount + (language === 'de' ? ` Dossiers aus ${event.totalSources} Quellen.\nGeschätzte Dauer: ~${event.estimatedMinutes} Minuten.\n\n_Bitte nicht schließen - das dauert einen Moment._` : ` dossiers from ${event.totalSources} sources.\nEstimated duration: ~${event.estimatedMinutes} minutes.\n\n_Please don't close - this takes a moment._`),
           timestamp: new Date().toISOString(),
           type: "synthesis_waiting",
           estimatedMinutes: event.estimatedMinutes,
@@ -732,33 +876,46 @@ export function Chat() {
       const summaryMsg: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: `**Recherche abgeschlossen**\n\n- ${result.total_points} Punkte bearbeitet\n- ${result.total_sources} Quellen analysiert\n- Dauer: ${Math.round(result.duration_seconds / 60)} Minuten`,
+        content: t('researchComplete', language) + (language === 'de' ? `${result.total_points} Punkte bearbeitet\n- ${result.total_sources} Quellen analysiert\n- Dauer: ${Math.round(result.duration_seconds / 60)} Minuten` : `${result.total_points} points processed\n- ${result.total_sources} sources analyzed\n- Duration: ${Math.round(result.duration_seconds / 60)} minutes`),
         timestamp: new Date().toISOString(),
       };
       addMessage(sessionId, summaryMsg);
+
+      // Sources Registry Message - Ausklappbares Quellenverzeichnis
+      if (result.source_registry && Object.keys(result.source_registry).length > 0) {
+        const sourcesMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "", // Content wird nicht angezeigt, nur die Registry Box
+          timestamp: new Date().toISOString(),
+          type: "sources_registry",
+          sourceRegistry: result.source_registry,
+        };
+        addMessage(sessionId, sourcesMsg);
+      }
 
       updateSession(sessionId, { phase: "done" });
     } else if (result?.error) {
       const errorMsg: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: `**Fehler bei der Recherche:**\n\n${result.error}`,
+        content: t('researchErrorPrefix', language) + result.error,
         timestamp: new Date().toISOString(),
       };
       addMessage(sessionId, errorMsg);
-      updateSession(sessionId, { phase: "planning" }); // Zurück zu Planning
+      updateSession(sessionId, { phase: "planning" }); // Back to Planning
     }
-  }, [activeSession, runDeepResearch, updateSession, addMessage]);
+  }, [activeSession, runDeepResearch, runAcademicResearch, updateSession, addMessage, academicMode, language]);
 
-  // Handler: "Plan bearbeiten" Button → User kann Änderungen eingeben
+  // Handler: "Edit plan" button → User can enter changes
   const handleEditPlan = useCallback(() => {
     if (!activeSession) return;
 
-    // Prompt-Message dass User seine Änderungswünsche eingeben soll
+    // Prompt message for user to enter changes
     const promptMsg: Message = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "Was möchtest du am Plan ändern? Beschreibe deine Änderungswünsche:",
+      content: t('planChangePrompt', language),
       timestamp: new Date().toISOString(),
     };
     addMessage(activeSession.id, promptMsg);
@@ -768,54 +925,112 @@ export function Chat() {
     updateSession(activeSession.id, { phase: "planning" }); // Bleibt in planning, handleSend prüft das
   }, [activeSession, addMessage, updateSession]);
 
-  // Handler: "Synthesis laden" Button → Holt letzte Synthesis aus Backup
+  // Handler: "Load synthesis" button → Gets last synthesis from backup
   const handleRecoverSynthesis = useCallback(async () => {
     if (!activeSession) return;
 
     const sessionId = activeSession.id;
 
-    // Status-Message
+    // Status message
     const loadingMsg: Message = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "🔄 Lade letzte Synthesis aus Backup...",
+      content: t('loadingLastSynthesis', language),
       timestamp: new Date().toISOString(),
     };
     addMessage(sessionId, loadingMsg);
 
-    const result = await recoverSynthesis();
+    const result = await recoverSession();
 
-    if (result?.success && result.final_document) {
-      // Finale Response als Message
-      const finalMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: result.final_document,
-        timestamp: new Date().toISOString(),
-      };
-      addMessage(sessionId, finalMsg);
+    if (result?.success && result.session_id) {
+      const completedCount = result.completed_dossiers?.length || 0;
+      const remainingCount = result.remaining_points?.length || 0;
+      const totalCount = completedCount + remainingCount;
 
-      // Success Message
-      const successMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: `✅ **Synthesis erfolgreich wiederhergestellt**\n\nQuelle: \`${result.filename}\``,
-        timestamp: new Date().toISOString(),
-      };
-      addMessage(sessionId, successMsg);
+      if (remainingCount > 0) {
+        // Es gibt noch offene Punkte - automatisch fortsetzen!
+        const statusMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: language === 'de'
+            ? `🔄 Session gefunden: ${completedCount}/${totalCount} Dossiers fertig. Setze fort...`
+            : `🔄 Session found: ${completedCount}/${totalCount} dossiers complete. Resuming...`,
+          timestamp: new Date().toISOString(),
+        };
+        addMessage(sessionId, statusMsg);
+        updateSession(sessionId, { phase: "researching" });
 
-      updateSession(sessionId, { phase: "done" });
+        // Automatisch fortsetzen
+        const settings = loadSettings();
+        await resumeSession(
+          result.session_id,
+          settings.apiKey,
+          settings.workModel,
+          settings.finalModel,
+          // onStatus
+          (status) => setCurrentStatus(status),
+          // onSources
+          (urls) => {
+            const sourcesMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: `📚 ${urls.length} Quellen gefunden`,
+              timestamp: new Date().toISOString(),
+              sources: urls
+            };
+            addMessage(sessionId, sourcesMsg);
+          },
+          // onPointComplete
+          (event) => {
+            const pointMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: event.skipped
+                ? `⏭️ Punkt ${event.pointNumber} übersprungen: ${event.skipReason}`
+                : `✅ Punkt ${event.pointNumber}/${event.totalPoints}: ${event.pointTitle}\n\n${event.dossierFull || event.keyLearnings}`,
+              timestamp: new Date().toISOString(),
+            };
+            addMessage(sessionId, pointMsg);
+          },
+          // onSynthesisStart
+          (event) => {
+            const synthMsg: Message = {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: language === 'de'
+                ? `🔬 Final Synthesis läuft... (${event.dossierCount} Dossiers)`
+                : `🔬 Final Synthesis running... (${event.dossierCount} dossiers)`,
+              timestamp: new Date().toISOString(),
+            };
+            addMessage(sessionId, synthMsg);
+          }
+        );
+
+        updateSession(sessionId, { phase: "done" });
+      } else {
+        // Alles fertig - nur Status zeigen
+        const doneMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: language === 'de'
+            ? `✅ Session bereits abgeschlossen: ${completedCount} Dossiers`
+            : `✅ Session already complete: ${completedCount} dossiers`,
+          timestamp: new Date().toISOString(),
+        };
+        addMessage(sessionId, doneMsg);
+        updateSession(sessionId, { phase: "done" });
+      }
     } else {
-      // Error Message
+      // Error message
       const errorMsg: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: `❌ **Synthesis konnte nicht geladen werden**\n\n${result?.error || "Unbekannter Fehler"}`,
+        content: t('synthesisLoadFailed', language) + (result?.error || (language === 'de' ? 'Unbekannter Fehler' : 'Unknown error')),
         timestamp: new Date().toISOString(),
       };
       addMessage(sessionId, errorMsg);
     }
-  }, [activeSession, recoverSynthesis, addMessage, updateSession]);
+  }, [activeSession, recoverSession, resumeSession, addMessage, updateSession, language, setCurrentStatus]);
 
   return (
     <div className="h-screen flex bg-[var(--bg-primary)] overflow-hidden">
@@ -827,6 +1042,7 @@ export function Chat() {
         onNewSession={handleNewSession}
         onDeleteSession={handleDeleteSession}
         onRenameSession={handleRenameSession}
+        language={language}
       />
 
       {/* Main Chat Area */}
@@ -853,14 +1069,14 @@ export function Chat() {
             {/* Research Mode Toggle */}
             <div className="flex items-center gap-2 text-sm">
               <span className={`transition-colors ${!academicMode ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>
-                Normal
+                {t('normal', language)}
               </span>
               <button
                 onClick={handleAcademicToggle}
                 className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
                   academicMode ? 'bg-blue-600' : 'bg-[var(--bg-tertiary)] border border-[var(--border)]'
                 }`}
-                title={academicMode ? "Academic Deep Research aktiv" : "Normal Research aktiv"}
+                title={t('academicModeActive', language)}
               >
                 <span
                   className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
@@ -869,7 +1085,7 @@ export function Chat() {
                 />
               </button>
               <span className={`transition-colors ${academicMode ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>
-                Academic
+                {t('academic', language)}
               </span>
             </div>
 
@@ -900,7 +1116,7 @@ export function Chat() {
                   }`}
               />
               <span className="text-[var(--text-secondary)] text-sm">
-                {connected ? "Verbunden" : "Offline"}
+                {connected ? t('connected', language) : t('offline', language)}
               </span>
             </div>
 
@@ -908,7 +1124,7 @@ export function Chat() {
             <button
               onClick={() => setSettingsOpen(true)}
               className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors p-2"
-              title="Einstellungen"
+              title={t('settings', language)}
             >
               ⚙️
             </button>
@@ -933,10 +1149,11 @@ export function Chat() {
           showRecoveryButton={activeSession?.phase === "researching" && !loading}
           currentStatus={currentStatus}
           sessionPhase={activeSession?.phase}
+          language={language}
         />
 
         {/* Input */}
-        <InputBar onSend={handleSend} disabled={loading || !connected} />
+        <InputBar onSend={handleSend} disabled={loading || !connected} language={language} />
       </div>
 
       {/* Settings Modal */}

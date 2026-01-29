@@ -18,10 +18,12 @@ from lutum.researcher.context_state import ContextState
 logger = get_logger(__name__)
 
 # OpenRouter Config
-MODEL = "google/gemini-3-flash-preview"
+MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 
 PLAN_SYSTEM_PROMPT = """Du bist ein Research-Experte, der tiefe, reproduzierbare Recherche-Pläne erstellt.
+
+WICHTIG - SPRACHLICHE ANPASSUNG: Wenn die ursprüngliche Nutzer-Anfrage auf Englisch formuliert wurde, antworte auf Englisch. Wenn sie auf Deutsch war, antworte auf Deutsch.
 
 Der User hat eine Frage gestellt und Rückfragen wurden bereits beantwortet.
 

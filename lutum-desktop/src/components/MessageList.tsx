@@ -3,12 +3,100 @@
  * ======================
  * Zeigt Chat-Nachrichten an mit schönem Markdown Rendering.
  * Unterstützt Plan-Messages mit Buttons und Sources-Box.
+ *
+ * Security Notes:
+ * - All URLs are validated before opening
+ * - javascript:/data: protocols are blocked
+ * - Private IPs are blocked (SSRF prevention)
  */
 
-import { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { t, type Language } from "../i18n/translations";
+import { ReportRenderer } from "./ReportRenderer";
+
+// ============================================================================
+// SECURITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Validates URL for security.
+ * Prevents javascript:, data:, file: and other dangerous protocols.
+ */
+function isValidUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  if (url.length > 2048) return false;
+
+  try {
+    const parsed = new URL(url);
+    // Only allow http/https protocols
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return false;
+    }
+
+    // Block private IPs (basic SSRF protection)
+    const host = parsed.hostname.toLowerCase();
+    const privatePatterns = [
+      'localhost', '127.', '0.0.0.0', '10.', '192.168.',
+      '172.16.', '172.17.', '172.18.', '172.19.',
+      '172.20.', '172.21.', '172.22.', '172.23.',
+      '172.24.', '172.25.', '172.26.', '172.27.',
+      '172.28.', '172.29.', '172.30.', '172.31.',
+      '169.254.', '[::1]'
+    ];
+
+    for (const pattern of privatePatterns) {
+      if (host.startsWith(pattern) || host === pattern.replace('.', '')) {
+        return false;
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Safely opens a URL after validation.
+ */
+async function safeOpenUrl(url: string): Promise<void> {
+  if (!isValidUrl(url)) {
+    console.warn('Blocked potentially unsafe URL:', url);
+    return;
+  }
+
+  try {
+    await openUrl(url);
+  } catch {
+    // Fallback with security settings
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
+/**
+ * Prüft ob Content ein strukturierter Report mit unseren Markern ist.
+ * Reports haben Emoji-Section-Header (## 📊) und/oder SOURCES-Block.
+ */
+function isReportContent(content: string): boolean {
+  // Check für Emoji Section Headers
+  const hasEmojiSections = /^##\s+[📊🔬📚🔗⚖️🎯📋📎💡🔍🔄]/m.test(content);
+
+  // Check für SOURCES Block
+  const hasSourcesBlock = content.includes("=== SOURCES ===");
+
+  // Check für END REPORT oder END DOSSIER
+  const hasEndMarker = content.includes("=== END REPORT ===") || content.includes("=== END DOSSIER ===");
+
+  // Ist ein Report wenn mindestens 2 der 3 Kriterien erfüllt sind
+  // ODER wenn es Emoji Sections UND mindestens ein End-Marker hat
+  const criteria = [hasEmojiSections, hasSourcesBlock, hasEndMarker];
+  const criteriaCount = criteria.filter(Boolean).length;
+
+  return criteriaCount >= 2 || (hasEmojiSections && content.length > 1000);
+}
 
 export interface Message {
   id: string;
@@ -18,9 +106,11 @@ export interface Message {
   url?: string;
   loading?: boolean;
   /** Spezial-Typ für verschiedene Anzeigen */
-  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting";
+  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry";
   /** URLs für sources-Typ */
   sources?: string[];
+  /** Source Registry für klickbare Citations {1: "url1", 2: "url2"} */
+  sourceRegistry?: Record<number, string>;
   /** Punkt-Titel für point_summary-Typ */
   pointTitle?: string;
   /** Punkt-Nummer für point_summary-Typ */
@@ -38,25 +128,18 @@ export interface Message {
 }
 
 /**
- * SourcesBox - Aufklappbare Box mit klickbaren Quellen-Links.
+ * SourcesBox - Collapsible box with clickable source links.
+ * Security: URLs are validated before use.
  */
-function SourcesBox({ sources }: { sources: string[] }) {
+function SourcesBox({ sources, language }: { sources: string[]; language: Language }) {
   const [expanded, setExpanded] = useState(false);
 
-  const handleLinkClick = async (url: string) => {
-    try {
-      await openUrl(url);
-    } catch (e) {
-      console.error("Failed to open link:", e);
-      window.open(url, "_blank");
-    }
-  };
-
   const getDomain = (url: string) => {
+    if (!isValidUrl(url)) return "Invalid URL";
     try {
       return new URL(url).hostname.replace("www.", "");
     } catch {
-      return url;
+      return "Invalid URL";
     }
   };
 
@@ -68,7 +151,7 @@ function SourcesBox({ sources }: { sources: string[] }) {
       >
         <span className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
           <span className="text-lg">📚</span>
-          Genutzte Quellen ({sources.length})
+          {t('sourcesUsed', language)}{sources.length})
         </span>
         <span className={`text-[var(--text-secondary)] transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}>
           ▼
@@ -77,28 +160,121 @@ function SourcesBox({ sources }: { sources: string[] }) {
 
       {expanded && (
         <div className="border-t border-[var(--border)]">
-          {sources.map((url, index) => (
-            <button
-              key={index}
-              onClick={() => handleLinkClick(url)}
-              className="w-full text-left px-4 py-3 hover:bg-[var(--bg-hover)] transition-colors group border-b border-[var(--border)] last:border-b-0"
-            >
-              <div className="flex items-center gap-2 md:gap-3 overflow-hidden">
-                <span className="text-blue-400 text-sm md:text-base flex-shrink-0">🔗</span>
-                <div className="flex-1 min-w-0 overflow-hidden">
-                  <span className="text-xs md:text-sm font-medium text-[var(--text-primary)] group-hover:text-blue-400 transition-colors">
-                    {getDomain(url)}
-                  </span>
-                  <div className="text-xs text-[var(--text-secondary)] truncate mt-0.5 opacity-70">
-                    {url}
+          {sources.map((url, index) => {
+            const urlIsValid = isValidUrl(url);
+            return (
+              <button
+                key={index}
+                onClick={() => urlIsValid && safeOpenUrl(url)}
+                disabled={!urlIsValid}
+                className={`w-full text-left px-4 py-3 transition-colors group border-b border-[var(--border)] last:border-b-0 ${
+                  urlIsValid
+                    ? 'hover:bg-[var(--bg-hover)] cursor-pointer'
+                    : 'opacity-50 cursor-not-allowed'
+                }`}
+              >
+                <div className="flex items-center gap-2 md:gap-3 overflow-hidden">
+                  <span className="text-blue-400 text-sm md:text-base flex-shrink-0">🔗</span>
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <span className="text-xs md:text-sm font-medium text-[var(--text-primary)] group-hover:text-blue-400 transition-colors">
+                      {getDomain(url)}
+                    </span>
+                    <div className="text-xs text-[var(--text-secondary)] truncate mt-0.5 opacity-70">
+                      {urlIsValid ? url : 'URL konnte nicht validiert werden'}
+                    </div>
                   </div>
+                  {urlIsValid && (
+                    <span className="text-[var(--text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 hidden sm:block">
+                      →
+                    </span>
+                  )}
                 </div>
-                <span className="text-[var(--text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 hidden sm:block">
-                  →
-                </span>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * SourcesRegistryBox - Zeigt alle Quellen mit globaler Nummerierung.
+ * Ausklappbar am Ende der Deep Research.
+ */
+function SourcesRegistryBox({ registry, language }: { registry: Record<number, string>; language: Language }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const getDomain = (url: string) => {
+    if (!isValidUrl(url)) return "Invalid URL";
+    try {
+      return new URL(url).hostname.replace("www.", "");
+    } catch {
+      return "Invalid URL";
+    }
+  };
+
+  // Sortiere nach Nummer
+  const sortedEntries = Object.entries(registry)
+    .map(([num, url]) => ({ num: parseInt(num), url }))
+    .sort((a, b) => a.num - b.num);
+
+  return (
+    <div className="rounded-xl border-2 border-purple-500/30 overflow-hidden bg-gradient-to-br from-purple-500/5 to-blue-500/10 w-full">
+      {/* Header */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-purple-500/10 hover:bg-purple-500/20 transition-all duration-200"
+      >
+        <span className="flex items-center gap-2 text-sm font-bold text-purple-400">
+          <span className="text-lg">📎</span>
+          {language === 'de' ? 'Quellenverzeichnis' : 'Source Registry'} ({sortedEntries.length})
+        </span>
+        <span className={`text-purple-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}>
+          ▼
+        </span>
+      </button>
+
+      {/* Expandable Content */}
+      {expanded && (
+        <div className="border-t border-purple-500/20 max-h-[400px] overflow-y-auto">
+          {sortedEntries.map(({ num, url }) => {
+            const urlIsValid = isValidUrl(url);
+            return (
+              <button
+                key={num}
+                onClick={() => urlIsValid && safeOpenUrl(url)}
+                disabled={!urlIsValid}
+                className={`w-full text-left px-4 py-2.5 transition-colors group border-b border-purple-500/10 last:border-b-0 ${
+                  urlIsValid
+                    ? 'hover:bg-purple-500/10 cursor-pointer'
+                    : 'opacity-50 cursor-not-allowed'
+                }`}
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  {/* Citation Number Badge */}
+                  <span className="flex-shrink-0 w-7 h-7 flex items-center justify-center bg-blue-500/20 text-blue-400 text-xs font-bold rounded border border-blue-500/30">
+                    {num}
+                  </span>
+                  {/* URL Info */}
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <span className="text-xs md:text-sm font-medium text-[var(--text-primary)] group-hover:text-blue-400 transition-colors">
+                      {getDomain(url)}
+                    </span>
+                    <div className="text-xs text-[var(--text-secondary)] truncate mt-0.5 opacity-70">
+                      {urlIsValid ? url : 'URL ungültig'}
+                    </div>
+                  </div>
+                  {/* Arrow */}
+                  {urlIsValid && (
+                    <span className="text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                      →
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -117,7 +293,8 @@ function PointSummaryBox({
   content,
   dossierFull,
   skipped,
-  skipReason
+  skipReason,
+  language
 }: {
   pointTitle: string;
   pointNumber: number;
@@ -126,6 +303,7 @@ function PointSummaryBox({
   dossierFull?: string;
   skipped?: boolean;
   skipReason?: string;
+  language: Language;
 }) {
   const [showFullDossier, setShowFullDossier] = useState(false);
   const progress = Math.round((pointNumber / totalPoints) * 100);
@@ -138,7 +316,7 @@ function PointSummaryBox({
           <div className="flex items-center justify-between mb-2">
             <span className="flex items-center gap-2 text-sm font-bold text-yellow-400">
               <span className="text-lg">⚠</span>
-              Punkt {pointNumber}/{totalPoints} übersprungen
+              {t('pointSkipped', language)}{pointNumber}/{totalPoints}{t('skipped', language)}
             </span>
             <span className="text-xs font-semibold text-yellow-400/80">
               {progress}%
@@ -157,7 +335,7 @@ function PointSummaryBox({
           </span>
         </div>
         <div className="px-4 py-3 text-sm text-yellow-400/80">
-          <strong>Grund:</strong> {skipReason || "Unbekannt"}
+          <strong>{t('reason', language)}</strong> {skipReason || (language === 'de' ? 'Unbekannt' : 'Unknown')}
         </div>
       </div>
     );
@@ -170,7 +348,7 @@ function PointSummaryBox({
         <div className="flex items-center justify-between mb-2">
           <span className="flex items-center gap-2 text-sm font-bold text-green-400">
             <span className="text-lg">✓</span>
-            Punkt {pointNumber}/{totalPoints} abgeschlossen
+            {t('pointCompleted', language)}{pointNumber}/{totalPoints}{t('completed', language)}
           </span>
           <span className="text-xs font-semibold text-green-400/80">
             {progress}%
@@ -206,7 +384,7 @@ function PointSummaryBox({
           >
             <span className="flex items-center gap-2 text-green-400 font-medium">
               <span>📄</span>
-              {showFullDossier ? "Dossier ausblenden" : "Volles Dossier anzeigen"}
+              {showFullDossier ? t('hideDossier', language) : t('showFullDossier', language)}
             </span>
             <span className={`text-green-400 transition-transform duration-200 ${showFullDossier ? "rotate-180" : ""}`}>
               ▼
@@ -215,7 +393,11 @@ function PointSummaryBox({
 
           {showFullDossier && (
             <div className="px-4 py-4 border-t border-green-500/10 bg-[var(--bg-tertiary)]/30 text-sm text-[var(--text-secondary)] leading-relaxed max-h-[500px] overflow-y-auto">
-              <MarkdownContent content={dossierFull} isUser={false} />
+              {isReportContent(dossierFull) ? (
+                <ReportRenderer content={dossierFull} />
+              ) : (
+                <MarkdownContent content={dossierFull} isUser={false} />
+              )}
             </div>
           )}
         </div>
@@ -225,25 +407,88 @@ function PointSummaryBox({
 }
 
 /**
+ * CitationBadge - Klickbarer Citation Badge [N]
+ */
+function CitationBadge({ num }: { num: number }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center w-5 h-5 mx-0.5 text-xs font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded align-super cursor-default"
+      title={`Quelle ${num}`}
+    >
+      {num}
+    </span>
+  );
+}
+
+/**
+ * Parst Text und ersetzt [N] mit CitationBadge
+ */
+function parseCitationsInText(text: string, keyPrefix: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  const regex = /\[(\d+)\]/g;
+  let match;
+  let count = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Text vor der Citation
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    // Citation Badge
+    const num = parseInt(match[1], 10);
+    parts.push(<CitationBadge key={`${keyPrefix}-${count++}`} num={num} />);
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Rest des Texts
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+}
+
+/**
+ * Rekursiv durch Children gehen und Citations parsen
+ */
+function processChildrenForCitations(children: React.ReactNode, keyPrefix: string): React.ReactNode {
+  if (typeof children === 'string') {
+    const parsed = parseCitationsInText(children, keyPrefix);
+    return parsed.length === 1 ? parsed[0] : <>{parsed}</>;
+  }
+
+  if (Array.isArray(children)) {
+    return children.map((child, i) => processChildrenForCitations(child, `${keyPrefix}-${i}`));
+  }
+
+  if (React.isValidElement(children)) {
+    const childProps = children.props as { children?: React.ReactNode };
+    if (childProps.children) {
+      return React.cloneElement(children, {}, processChildrenForCitations(childProps.children, keyPrefix));
+    }
+  }
+
+  return children;
+}
+
+/**
  * MarkdownContent - Rendert Markdown mit schönem Styling.
+ * Security: All URLs are validated before opening.
  */
 function MarkdownContent({ content, isUser }: { content: string; isUser: boolean }) {
   const handleLinkClick = async (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
-    try {
-      await openUrl(href);
-    } catch {
-      window.open(href, "_blank");
-    }
+    await safeOpenUrl(href);
   };
 
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        // Paragraphs
+        // Paragraphs - MIT Citation Parsing
         p: ({ children }) => (
-          <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>
+          <p className="mb-3 last:mb-0 leading-relaxed">{processChildrenForCitations(children, 'p')}</p>
         ),
 
         // Headers
@@ -275,7 +520,7 @@ function MarkdownContent({ content, isUser }: { content: string; isUser: boolean
         li: ({ children }) => (
           <li className="flex items-start gap-2">
             <span className="text-blue-400 mt-1.5 text-xs">●</span>
-            <span className="flex-1">{children}</span>
+            <span className="flex-1">{processChildrenForCitations(children, 'li')}</span>
           </li>
         ),
 
@@ -310,20 +555,30 @@ function MarkdownContent({ content, isUser }: { content: string; isUser: boolean
           </blockquote>
         ),
 
-        // Links
-        a: ({ href, children }) => (
-          <a
-            href={href}
-            onClick={(e) => href && handleLinkClick(e, href)}
-            className={`underline underline-offset-2 cursor-pointer transition-colors ${
-              isUser
-                ? "text-blue-200 hover:text-white"
-                : "text-blue-400 hover:text-blue-300"
-            }`}
-          >
-            {children}
-          </a>
-        ),
+        // Links (with security validation)
+        a: ({ href, children }) => {
+          // Security: Validate URL before rendering as clickable
+          const safeHref = href && isValidUrl(href) ? href : null;
+
+          if (!safeHref) {
+            // Render as plain text if URL is invalid
+            return <span className={isUser ? "text-blue-200" : "text-[var(--text-secondary)]"}>{children}</span>;
+          }
+
+          return (
+            <a
+              href={safeHref}
+              onClick={(e) => handleLinkClick(e, safeHref)}
+              className={`underline underline-offset-2 cursor-pointer transition-colors ${
+                isUser
+                  ? "text-blue-200 hover:text-white"
+                  : "text-blue-400 hover:text-blue-300"
+              }`}
+            >
+              {children}
+            </a>
+          );
+        },
 
         // Tables
         table: ({ children }) => (
@@ -338,7 +593,7 @@ function MarkdownContent({ content, isUser }: { content: string; isUser: boolean
           <th className="px-4 py-2 text-left font-semibold border-b border-[var(--border)]">{children}</th>
         ),
         td: ({ children }) => (
-          <td className="px-4 py-2 border-b border-[var(--border)] last:border-b-0">{children}</td>
+          <td className="px-4 py-2 border-b border-[var(--border)] last:border-b-0">{processChildrenForCitations(children, 'td')}</td>
         ),
 
         // Horizontal Rule
@@ -362,9 +617,10 @@ interface MessageListProps {
   showRecoveryButton?: boolean;
   currentStatus?: string;
   sessionPhase?: string;
+  language: Language;
 }
 
-export function MessageList({ messages, loading, onStartResearch, onEditPlan, onRecoverSynthesis, showPlanButtons, showRecoveryButton, currentStatus, sessionPhase }: MessageListProps) {
+export function MessageList({ messages, loading, onStartResearch, onEditPlan, onRecoverSynthesis, showPlanButtons, showRecoveryButton, currentStatus, sessionPhase, language }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
@@ -395,7 +651,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
         <div className="text-center">
           <div className="text-7xl mb-6 opacity-80">🔍</div>
           <p className="text-2xl font-semibold text-[var(--text-primary)] mb-2">Lutum Veritas</p>
-          <p className="text-sm opacity-70">Starte eine neue Recherche</p>
+          <p className="text-sm opacity-70 italic">Raw. Real. Uncensored.</p>
         </div>
       </div>
     );
@@ -435,7 +691,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
       onScroll={handleScroll}
       className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6"
     >
-      <div className="max-w-4xl mx-auto space-y-4 md:space-y-5">
+      <div className="max-w-4xl xl:max-w-[85%] 2xl:max-w-[90%] mx-auto space-y-4 md:space-y-5">
       {messages.map((msg, index) => {
         const isPlanMessage = msg.type === "plan";
         const isLastPlan = index === lastPlanMsgIndex;
@@ -462,7 +718,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                 </div>
               )}
 
-              {/* Point Summary Box - Spezial-Rendering */}
+              {/* Point Summary Box - Special rendering */}
               {msg.type === "point_summary" && msg.pointTitle ? (
                 <PointSummaryBox
                   pointTitle={msg.pointTitle}
@@ -472,6 +728,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                   dossierFull={msg.dossierFull}
                   skipped={msg.skipped}
                   skipReason={msg.skipReason}
+                  language={language}
                 />
               ) : msg.type === "synthesis_waiting" ? (
                 /* Synthesis Waiting Box - Spezielle Warteanimation */
@@ -479,7 +736,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                   <div className="px-4 py-3 bg-purple-500/10 border-b border-purple-500/20">
                     <div className="flex items-center gap-2 text-sm font-bold text-purple-400">
                       <span className="text-lg animate-spin" style={{ animationDuration: "2s" }}>🧠</span>
-                      Final Synthesis läuft...
+                      {t('finalSynthesisRunning', language)}
                       {msg.estimatedMinutes && (
                         <span className="ml-auto text-xs font-normal opacity-80">
                           ~{msg.estimatedMinutes} min
@@ -495,10 +752,13 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                       <span className="animate-pulse">●</span>
                       <span className="animate-pulse" style={{ animationDelay: "200ms" }}>●</span>
                       <span className="animate-pulse" style={{ animationDelay: "400ms" }}>●</span>
-                      <span className="ml-2">Verarbeite...</span>
+                      <span className="ml-2">{t('processing', language)}</span>
                     </div>
                   </div>
                 </div>
+              ) : msg.type === "sources_registry" && msg.sourceRegistry ? (
+                /* Sources Registry Box - Ausklappbares Quellenverzeichnis */
+                <SourcesRegistryBox registry={msg.sourceRegistry} language={language} />
               ) : (
                 <>
                   {/* Markdown Content - mit ID für PDF Export wenn finaler Report */}
@@ -506,12 +766,17 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                     id={isFinalReport ? "report-container" : undefined}
                     className="text-[14px] md:text-[15px] leading-relaxed break-words overflow-hidden"
                   >
-                    <MarkdownContent content={msg.content} isUser={isUser} />
+                    {/* Use ReportRenderer for reports with markers, MarkdownContent for others */}
+                    {isReportContent(msg.content) ? (
+                      <ReportRenderer content={msg.content} />
+                    ) : (
+                      <MarkdownContent content={msg.content} isUser={isUser} />
+                    )}
                   </div>
 
                   {/* Sources Box */}
                   {msg.type === "sources" && msg.sources && msg.sources.length > 0 && (
-                    <SourcesBox sources={msg.sources} />
+                    <SourcesBox sources={msg.sources} language={language} />
                   )}
                 </>
               )}
@@ -523,13 +788,13 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                     onClick={onStartResearch}
                     className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-lg"
                   >
-                    Los geht's
+                    {t('letsGo', language)}
                   </button>
                   <button
                     onClick={onEditPlan}
                     className="flex-1 bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border border-[var(--border)]"
                   >
-                    Plan bearbeiten
+                    {t('editPlan', language)}
                   </button>
                 </div>
               )}
@@ -566,7 +831,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                 {/* Spinning Cog */}
                 <span className="text-green-400 animate-spin" style={{ animationDuration: "1s" }}>⚙</span>
                 <span className="text-green-400">$</span>
-                <span className="text-[#c9d1d9]">{currentStatus || "Initialisiere..."}</span>
+                <span className="text-[#c9d1d9]">{currentStatus || t('initializing', language)}</span>
                 {/* Blinking Cursor */}
                 <span className="animate-pulse text-green-400">▋</span>
               </div>
@@ -576,7 +841,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                 <span className="animate-pulse" style={{ animationDelay: "0ms" }}>●</span>
                 <span className="animate-pulse" style={{ animationDelay: "200ms" }}>●</span>
                 <span className="animate-pulse" style={{ animationDelay: "400ms" }}>●</span>
-                <span className="ml-2 opacity-60">Verarbeite Daten...</span>
+                <span className="ml-2 opacity-60">{t('processingData', language)}</span>
               </div>
             </div>
           </div>
@@ -591,7 +856,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
             className="flex items-center gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white px-5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-lg border border-amber-500/30"
           >
             <span className="text-lg">🔄</span>
-            <span>Synthesis wiederherstellen</span>
+            <span>{t('restoreSynthesis', language)}</span>
           </button>
         </div>
       )}

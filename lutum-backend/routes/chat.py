@@ -53,8 +53,8 @@ class ChatRequest(BaseModel):
         api_key: Optional OpenRouter API Key Override
         max_iterations: Max Iterationen für komplexe Anfragen (1-20)
     """
-    message: str = Field(..., description="User Nachricht / URL + Query")
-    api_key: Optional[str] = Field(None, description="OpenRouter API Key (überschreibt Default)")
+    message: str = Field(..., description="User Nachricht / URL + Query", max_length=10000)
+    api_key: Optional[str] = Field(None, description="OpenRouter API Key (überschreibt Default)", max_length=200)
     max_iterations: int = Field(5, ge=1, le=20, description="Max Iterationen für komplexe Anfragen")
 
 
@@ -112,14 +112,14 @@ async def chat(request: ChatRequest):
     except ValueError as e:
         # Ungültige Anfrage (leere Message etc.)
         logger.warning(f"Invalid request: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Invalid request parameters")
 
     except RuntimeError as e:
         # Scrape/Analyze Fehler - gibt Response mit Error zurück statt Exception
         logger.error(f"Processing failed: {e}")
         return ChatResponse(
             response="",
-            error=str(e)
+            error="Processing failed. Please try again."
         )
 
     except Exception as e:

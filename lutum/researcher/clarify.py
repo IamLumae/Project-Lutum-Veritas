@@ -17,7 +17,7 @@ from lutum.scrapers.camoufox_scraper import scrape_urls_batch
 logger = get_logger(__name__)
 
 # === CONFIG ===
-MODEL = "google/gemini-3-flash-preview"
+MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 
 def _format_scraped_for_llm(scraped: dict[str, str], max_chars_per_page: int = 3000) -> str:
@@ -51,6 +51,8 @@ def _format_scraped_for_llm(scraped: dict[str, str], max_chars_per_page: int = 3
 # === LLM PROMPT ===
 CLARIFY_PROMPT = """Du bist ein Research-Assistent. Der Nutzer hat einen Recherche-Auftrag gegeben.
 
+WICHTIG - SPRACHLICHE ANPASSUNG: Wenn die ursprüngliche Nutzer-Anfrage auf Englisch formuliert wurde, antworte auf Englisch. Wenn sie auf Deutsch war, antworte auf Deutsch.
+
 Du hast gerade eine erste Übersichtssuche durchgeführt und folgende Seiten gefunden und gelesen.
 
 Deine Aufgabe jetzt:
@@ -59,7 +61,7 @@ Deine Aufgabe jetzt:
 3. Wenn nötig: Stelle bis zu 5 klärende Rückfragen
 
 WICHTIG:
-- Beginne IMMER positiv und motivierend (z.B. "Hey, spannende Idee!" oder "Interessanter Auftrag!")
+- Beginne IMMER positiv und motivierend (z.B. "Hey, spannende Idee!" oder "Interessanter Auftrag!" - oder auf Englisch wenn der User Englisch schreibt)
 - Stelle NUR Fragen wenn wirklich nötig
 - Fragen sollten helfen die Recherche zu fokussieren
 - Keine Beispiele in den Fragen - der Nutzer soll frei antworten

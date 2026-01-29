@@ -1,4 +1,4 @@
-Lutum Veritas
+Lutum Veritas - Deep Research Engine
 Copyright (C) 2026 Martin Gehrken
 
 This program is free software: you can redistribute it and/or modify
@@ -15,24 +15,41 @@ You should have received a copy of the GNU Affero General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 ================================================================================
-COMMERCIAL LICENSING
+                            COMMERCIAL LICENSING
 ================================================================================
 
 If you cannot comply with the AGPL-3.0 license terms (for example, if you want
 to use this software in a proprietary product without releasing your source
 code), commercial licensing options are available.
 
+Commercial licenses are available for:
+  - Proprietary/closed-source integration
+  - SaaS deployment without AGPL source disclosure obligations
+  - White-label and OEM distribution
+  - Enterprise support and custom development
+
 Contact: iamlumae@gmail.com
 
 ================================================================================
-THIRD-PARTY NOTICES
+                            THIRD-PARTY NOTICES
 ================================================================================
 
 This software includes or depends on the following third-party components:
 
+- Camoufox (MIT) - https://github.com/nicholaslazooffers/camoufox
+- FastAPI (MIT) - https://fastapi.tiangolo.com
 - Tauri (MIT/Apache-2.0) - https://tauri.app
 - React (MIT) - https://react.dev
 - Tailwind CSS (MIT) - https://tailwindcss.com
 - jsPDF (MIT) - https://github.com/parallax/jsPDF
 
 See the respective project licenses for details.
+
+================================================================================
+                               ATTRIBUTION
+================================================================================
+
+"LV Research" logo and "Lutum Veritas" name are trademarks of Martin Gehrken.
+
+Latin meaning: "Lutum" (Clay/Mud) + "Veritas" (Truth)
+→ "Shaping Truth from Raw Data"
