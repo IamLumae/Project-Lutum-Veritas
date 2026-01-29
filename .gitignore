@@ -69,3 +69,16 @@ out/
 .tmp/
 .tmp*/
 
+############################
+# Research data (local only)
+############################
+research_checkpoints/
+research_outputs/
+final_synthesis_backups/
+output/
+
+############################
+# PyInstaller (deprecated)
+############################
+*.spec
+
