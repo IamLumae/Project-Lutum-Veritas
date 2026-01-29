@@ -97,10 +97,16 @@ export function useBackend() {
    */
   const checkHealth = useCallback(async (): Promise<boolean> => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
+
       const response = await fetch(`${BACKEND_URL}/health`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (response.ok) {
         setState((s) => ({ ...s, connected: true, error: null }));
@@ -113,7 +119,7 @@ export function useBackend() {
       setState((s) => ({
         ...s,
         connected: false,
-        error: "Cannot connect to backend. Is it running?",
+        error: null, // Kein Error anzeigen wenn Backend einfach nicht läuft
       }));
       return false;
     }
@@ -399,7 +405,9 @@ export function useBackend() {
       onPointComplete?: (event: PointCompleteEvent) => void,
       onSynthesisStart?: (event: SynthesisStartEvent) => void,
       modelSize: string = 'small',
-      academicMode: boolean = false
+      academicMode: boolean = false,
+      workModel: string = 'google/gemini-2.5-flash-preview-05-20',
+      finalModel: string = 'anthropic/claude-sonnet-4'
     ): Promise<DeepResearchResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -413,6 +421,8 @@ export function useBackend() {
             session_id: sessionId,
             model_size: modelSize,
             academic_mode: academicMode,
+            work_model: workModel,
+            final_model: finalModel,
           }),
         });
 

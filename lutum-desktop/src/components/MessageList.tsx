@@ -361,9 +361,10 @@ interface MessageListProps {
   showPlanButtons?: boolean;
   showRecoveryButton?: boolean;
   currentStatus?: string;
+  sessionPhase?: string;
 }
 
-export function MessageList({ messages, loading, onStartResearch, onEditPlan, onRecoverSynthesis, showPlanButtons, showRecoveryButton, currentStatus }: MessageListProps) {
+export function MessageList({ messages, loading, onStartResearch, onEditPlan, onRecoverSynthesis, showPlanButtons, showRecoveryButton, currentStatus, sessionPhase }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [userScrolledUp, setUserScrolledUp] = useState(false);
@@ -407,6 +408,27 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
     return -1;
   })();
 
+  // Finde die LÄNGSTE Assistant-Message für PDF Export (das ist die Synthesis)
+  // Nur wenn phase === 'done'
+  const synthesisMessageIndex = (() => {
+    if (sessionPhase !== 'done') return -1;
+
+    // Finde alle text-Assistant Messages
+    const candidates: { index: number; length: number }[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (m.role === 'assistant' && (!m.type || m.type === 'text')) {
+        candidates.push({ index: i, length: m.content.length });
+      }
+    }
+
+    if (candidates.length === 0) return -1;
+
+    // Die längste ist die Synthesis
+    const longest = candidates.reduce((a, b) => (b.length > a.length ? b : a));
+    return longest.index;
+  })();
+
   return (
     <div
       ref={containerRef}
@@ -419,6 +441,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
         const isLastPlan = index === lastPlanMsgIndex;
         const shouldShowButtons = isPlanMessage && isLastPlan && showPlanButtons;
         const isUser = msg.role === "user";
+        const isFinalReport = index === synthesisMessageIndex;
 
         return (
           <div
@@ -478,8 +501,11 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                 </div>
               ) : (
                 <>
-                  {/* Markdown Content */}
-                  <div className="text-[14px] md:text-[15px] leading-relaxed break-words overflow-hidden">
+                  {/* Markdown Content - mit ID für PDF Export wenn finaler Report */}
+                  <div
+                    id={isFinalReport ? "report-container" : undefined}
+                    className="text-[14px] md:text-[15px] leading-relaxed break-words overflow-hidden"
+                  >
                     <MarkdownContent content={msg.content} isUser={isUser} />
                   </div>
 

@@ -20,9 +20,11 @@ import {
   saveSessions,
   createSession,
 } from "../stores/sessions";
-// @ts-ignore
-import html2pdf from "html2pdf.js";
 import { saveSettings } from "../stores/settings";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile, writeFile } from "@tauri-apps/plugin-fs";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export function Chat() {
   // Sessions State
@@ -49,13 +51,6 @@ export function Chat() {
     setAcademicMode(s.academicMode);
   }, [settingsOpen]); // Refresh if settings modal changed something
 
-  // Helper: Persist Model Size
-  const handleModelChange = (size: 'small' | 'large') => {
-    setModelSize(size);
-    const s = loadSettings();
-    saveSettings({ ...s, modelSize: size });
-  };
-
   // Helper: Persist Academic Mode
   const handleAcademicToggle = () => {
     const newVal = !academicMode;
@@ -64,47 +59,300 @@ export function Chat() {
     saveSettings({ ...s, academicMode: newVal });
   };
 
-  // EXPORT HANDLERS
-  const handleExportMD = () => {
-    if (!activeSession?.messages) return;
-    const finalMsg = [...activeSession.messages].reverse().find(m => m.role === 'assistant' && !m.type);
-    if (!finalMsg) return;
-
-    const blob = new Blob([finalMsg.content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${activeSession.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_synthesis.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleExportPDF = () => {
-    // Finde das Element mit der ID "report-content" oder den Container der letzten Message
-    // Wir müssen dem ReportRenderer eine ID geben oder hier tricksen.
-    // Einfachheitshalber: Wir rendern den Content temporär in ein verstecktes Div für html2pdf
-
-    // Besser: Wir suchen im DOM nach dem gerenderten Report.
-    // Da wir MarkdownView/ReportView nutzen, sollten wir dort vielleicht exportieren?
-    // User will Button "MD/PDF" im Chat (Header oder Footer?).
-    // Der Plan sagt "Header or near final message".
-    // Ich nehme den Header.
-
-    const element = document.getElementById('report-container');
-    if (!element) {
-      alert("Kein Report gefunden zum Exportieren. Bitte warten bis Synthesis fertig ist.");
+  // EXPORT HANDLERS - Using Tauri native APIs
+  const handleExportMD = async () => {
+    if (!activeSession?.messages) {
+      alert("Keine Session aktiv.");
       return;
     }
 
-    const opt: any = {
-      margin: [10, 10],
-      filename: `${activeSession?.title || 'report'}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
+    if (activeSession.phase !== 'done') {
+      alert(`Export nur möglich wenn Recherche abgeschlossen ist.\nAktueller Status: ${activeSession.phase}`);
+      return;
+    }
 
-    html2pdf().set(opt).from(element).save();
+    // Finde die LÄNGSTE Assistant-Message (das ist die Synthesis, nicht die Summary)
+    const assistantMessages = activeSession.messages.filter(
+      m => m.role === 'assistant' && (!m.type || m.type === 'text')
+    );
+
+    if (assistantMessages.length === 0) {
+      alert("Keine exportierbare Nachricht gefunden.");
+      return;
+    }
+
+    // Die längste Message ist die Synthesis
+    const finalMsg = assistantMessages.reduce((longest, current) =>
+      current.content.length > longest.content.length ? current : longest
+    );
+
+    try {
+      // Tauri Save Dialog
+      const filePath = await save({
+        filters: [{ name: 'Markdown', extensions: ['md'] }],
+        defaultPath: `${activeSession.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_synthesis.md`
+      });
+
+      if (filePath) {
+        await writeTextFile(filePath, finalMsg.content);
+        alert("Markdown erfolgreich exportiert!");
+      }
+    } catch (err) {
+      alert(`Export fehlgeschlagen: ${err}`);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!activeSession?.messages) {
+      alert("Keine Session aktiv.");
+      return;
+    }
+
+    if (activeSession.phase !== 'done') {
+      alert(`Export nur möglich wenn Recherche abgeschlossen ist.\nAktueller Status: ${activeSession.phase}`);
+      return;
+    }
+
+    // Finde die LÄNGSTE Assistant-Message (das ist die Synthesis)
+    const assistantMessages = activeSession.messages.filter(
+      m => m.role === 'assistant' && (!m.type || m.type === 'text')
+    );
+
+    if (assistantMessages.length === 0) {
+      alert("Keine exportierbare Nachricht gefunden.");
+      return;
+    }
+
+    const finalMsg = assistantMessages.reduce((longest, current) =>
+      current.content.length > longest.content.length ? current : longest
+    );
+
+    try {
+      // Tauri Save Dialog
+      const filePath = await save({
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+        defaultPath: `${activeSession.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_synthesis.pdf`
+      });
+
+      if (!filePath) return;
+
+      // Create PDF with jsPDF
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Page settings
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const maxWidth = pageWidth - (margin * 2);
+      let yPos = margin;
+      const lineHeight = 6;
+
+      // Helper: Check page break
+      const checkPageBreak = (needed: number) => {
+        if (yPos + needed > pageHeight - margin) {
+          doc.addPage();
+          yPos = margin;
+        }
+      };
+
+      // Helper: Parse markdown table
+      const parseMarkdownTable = (tableLines: string[]): { headers: string[]; rows: string[][] } | null => {
+        if (tableLines.length < 2) return null;
+        const headerLine = tableLines[0];
+        const separatorLine = tableLines[1];
+
+        // Check if it's a valid table
+        if (!headerLine.includes('|') || !separatorLine.match(/^\|?[\s-:|]+\|?$/)) return null;
+
+        const parseRow = (line: string): string[] => {
+          return line.split('|')
+            .map(cell => cell.trim())
+            .filter((_, i, arr) => i > 0 && i < arr.length - (line.endsWith('|') ? 1 : 0) || !line.startsWith('|'));
+        };
+
+        const headers = parseRow(headerLine).map(h => h.replace(/\*\*/g, ''));
+        const rows = tableLines.slice(2).map(line => parseRow(line).map(c => c.replace(/\*\*/g, '')));
+
+        return { headers, rows };
+      };
+
+      // Title
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(activeSession.title, margin, yPos);
+      yPos += 12;
+
+      // Content
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+
+      // Pre-process: Remove code block markers and clean up
+      let content = finalMsg.content
+        .replace(/```[\w]*\n?/g, '')  // Remove ``` and ```language
+        .replace(/`([^`]+)`/g, '$1') // Remove inline code backticks
+        // Replace Unicode arrows and special chars with ASCII equivalents
+        .replace(/→|➔|➜|➝|➞|►|▶/g, '->')
+        .replace(/←|◄|◀/g, '<-')
+        .replace(/↔|⟷/g, '<->')
+        .replace(/⇒|⇨/g, '=>')
+        .replace(/⇐|⇦/g, '<=')
+        .replace(/✓|✔|☑/g, '[OK]')
+        .replace(/✗|✘|☒|❌/g, '[X]')
+        .replace(/•|●|○|◦|▪|▫/g, '*')
+        .replace(/—|–/g, '-')
+        .replace(/"|"/g, '"')
+        .replace(/'|'/g, "'")
+        .replace(/…/g, '...')
+        .replace(/×/g, 'x')
+        .replace(/÷/g, '/')
+        .replace(/≤/g, '<=')
+        .replace(/≥/g, '>=')
+        .replace(/≠/g, '!=')
+        .replace(/±/g, '+/-')
+        .replace(/∞/g, 'infinity')
+        .replace(/📊|📈|📉/g, '[Chart]')
+        .replace(/🔗/g, '[Link]')
+        .replace(/⚠️|⚠/g, '[!]')
+        .replace(/💡/g, '[Tip]')
+        .replace(/🎯/g, '[Target]')
+        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Remove other emojis
+        .replace(/[^\x00-\x7F\xA0-\xFF\u0100-\u017F]/g, ''); // Remove remaining non-Latin chars
+
+      // Split content into lines
+      const lines = content.split('\n');
+      let i = 0;
+
+      while (i < lines.length) {
+        const line = lines[i];
+
+        // Skip separator lines (---)
+        if (line.trim().match(/^-{3,}$/)) {
+          yPos += 4;
+          i++;
+          continue;
+        }
+
+        // Check for table start (line with |)
+        if (line.includes('|') && line.trim().startsWith('|')) {
+          // Collect all table lines
+          const tableLines: string[] = [];
+          while (i < lines.length && lines[i].includes('|')) {
+            tableLines.push(lines[i]);
+            i++;
+          }
+
+          const table = parseMarkdownTable(tableLines);
+          if (table && table.headers.length > 0) {
+            checkPageBreak(30);
+
+            autoTable(doc, {
+              startY: yPos,
+              head: [table.headers],
+              body: table.rows,
+              margin: { left: margin, right: margin },
+              styles: {
+                fontSize: 8,
+                cellPadding: 2,
+              },
+              headStyles: {
+                fillColor: [66, 66, 66],
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+              },
+              alternateRowStyles: {
+                fillColor: [245, 245, 245],
+              },
+            });
+
+            // Update yPos after table
+            yPos = (doc as any).lastAutoTable.finalY + 8;
+          }
+          continue;
+        }
+
+        // Headers
+        if (line.startsWith('# ')) {
+          checkPageBreak(15);
+          yPos += 4;
+          doc.setFontSize(14);
+          doc.setFont('helvetica', 'bold');
+          const headerText = line.replace(/^#+ /, '').replace(/\*\*/g, '');
+          const wrappedHeader = doc.splitTextToSize(headerText, maxWidth);
+          for (const hLine of wrappedHeader) {
+            checkPageBreak(lineHeight + 1);
+            doc.text(hLine, margin, yPos);
+            yPos += lineHeight + 1;
+          }
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+          yPos += 2;
+        } else if (line.startsWith('## ') || line.startsWith('### ')) {
+          checkPageBreak(12);
+          yPos += 3;
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'bold');
+          const headerText = line.replace(/^#+ /, '').replace(/\*\*/g, '');
+          const wrappedHeader = doc.splitTextToSize(headerText, maxWidth);
+          for (const hLine of wrappedHeader) {
+            checkPageBreak(lineHeight);
+            doc.text(hLine, margin, yPos);
+            yPos += lineHeight;
+          }
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'normal');
+          yPos += 2;
+        } else if (line.trim() === '') {
+          yPos += 3;
+        } else if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+          // Bullet points
+          checkPageBreak(lineHeight);
+          const bulletText = '• ' + line.trim().substring(2).replace(/\*\*/g, '');
+          const wrappedLines = doc.splitTextToSize(bulletText, maxWidth - 5);
+          for (let j = 0; j < wrappedLines.length; j++) {
+            checkPageBreak(lineHeight);
+            doc.text(wrappedLines[j], margin + (j === 0 ? 0 : 3), yPos);
+            yPos += lineHeight;
+          }
+        } else if (line.trim().match(/^\d+\.\s/)) {
+          // Numbered lists (1. 2. 3. etc.)
+          checkPageBreak(lineHeight);
+          const cleanLine = line.trim().replace(/\*\*/g, '');
+          const wrappedLines = doc.splitTextToSize(cleanLine, maxWidth - 5);
+          for (let j = 0; j < wrappedLines.length; j++) {
+            checkPageBreak(lineHeight);
+            doc.text(wrappedLines[j], margin + (j === 0 ? 0 : 5), yPos);
+            yPos += lineHeight;
+          }
+        } else {
+          // Normal text - clean up any remaining formatting
+          const cleanLine = line
+            .replace(/\*\*/g, '')
+            .replace(/\*/g, '')
+            .replace(/_/g, '');
+          const wrappedLines = doc.splitTextToSize(cleanLine, maxWidth);
+          for (const wLine of wrappedLines) {
+            checkPageBreak(lineHeight);
+            doc.text(wLine, margin, yPos);
+            yPos += lineHeight;
+          }
+        }
+
+        i++;
+      }
+
+      // Get PDF as array buffer
+      const pdfArrayBuffer = doc.output('arraybuffer');
+      const uint8Array = new Uint8Array(pdfArrayBuffer);
+
+      await writeFile(filePath, uint8Array);
+      alert("PDF erfolgreich exportiert!");
+    } catch (err) {
+      alert(`PDF Export fehlgeschlagen: ${err}`);
+    }
   };
 
   // Timer starten/stoppen basierend auf loading
@@ -465,7 +713,9 @@ export function Chat() {
         addMessage(sessionId, synthMsg);
       },
       modelSize,
-      academicMode
+      academicMode,
+      settings.workModel,
+      settings.finalModel
     );
 
     // Finale Response
@@ -584,9 +834,6 @@ export function Chat() {
         {/* Header */}
         <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
           <div className="flex items-center gap-3">
-            <h1 className="text-[var(--text-primary)] font-semibold">
-              {activeSession?.title || "Lutum Veritas"}
-            </h1>
             {/* Timer + Status während Recherche */}
             {loading && (
               <div className="flex items-center gap-2">
@@ -603,29 +850,28 @@ export function Chat() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Model Selector */}
-            <select
-              value={modelSize}
-              onChange={(e) => handleModelChange(e.target.value as 'small' | 'large')}
-              className="bg-[var(--bg-tertiary)] text-[var(--text-secondary)] text-sm border border-[var(--border)] rounded-md px-2 py-1 focus:outline-none focus:border-blue-500"
-              title="Modell-Größe wählen"
-            >
-              <option value="small">Small (Fast)</option>
-              <option value="large">Large (Deep)</option>
-            </select>
-
-            {/* Academic Toggle */}
-            <button
-              onClick={handleAcademicToggle}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-sm transition-colors ${academicMode
-                ? "bg-blue-900/30 border-blue-700 text-blue-300"
-                : "bg-transparent border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+            {/* Research Mode Toggle */}
+            <div className="flex items-center gap-2 text-sm">
+              <span className={`transition-colors ${!academicMode ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>
+                Normal
+              </span>
+              <button
+                onClick={handleAcademicToggle}
+                className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
+                  academicMode ? 'bg-blue-600' : 'bg-[var(--bg-tertiary)] border border-[var(--border)]'
                 }`}
-              title="Academic Mode"
-            >
-              <span className={`w-2 h-2 rounded-full ${academicMode ? "bg-blue-400" : "bg-gray-600"}`} />
-              Academic
-            </button>
+                title={academicMode ? "Academic Deep Research aktiv" : "Normal Research aktiv"}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    academicMode ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className={`transition-colors ${academicMode ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>
+                Academic
+              </span>
+            </div>
 
             {/* Export Buttons */}
             {activeSession?.phase === 'done' && (
@@ -686,6 +932,7 @@ export function Chat() {
           showPlanButtons={activeSession?.phase === "planning"}
           showRecoveryButton={activeSession?.phase === "researching" && !loading}
           currentStatus={currentStatus}
+          sessionPhase={activeSession?.phase}
         />
 
         {/* Input */}

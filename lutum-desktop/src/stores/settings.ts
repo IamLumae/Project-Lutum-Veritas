@@ -9,18 +9,20 @@ const STORAGE_KEY = "lutum-settings";
 
 export interface Settings {
   apiKey: string;
-  maxIterations: number;
   darkMode: boolean;
-  modelSize: 'small' | 'large';
+  modelSize: 'small' | 'large'; // Legacy - kept for backwards compatibility
   academicMode: boolean;
+  workModel: string;   // Modell für Vorarbeit (Think, Pick URLs, Dossier)
+  finalModel: string;  // Modell für Final Synthesis
 }
 
 const DEFAULT_SETTINGS: Settings = {
   apiKey: "",
-  maxIterations: 5,
   darkMode: true,
   modelSize: 'small',
   academicMode: false,
+  workModel: "google/gemini-2.5-flash-preview-05-20",
+  finalModel: "anthropic/claude-sonnet-4",
 };
 
 /**
