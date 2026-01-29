@@ -34,6 +34,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "../../lutum-backend": "backend",
+      "../../lutum": "lutum"
+    },
     "windows": {
       "wix": null,
       "nsis": {
