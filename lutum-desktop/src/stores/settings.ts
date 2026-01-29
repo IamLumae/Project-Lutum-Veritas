@@ -11,12 +11,16 @@ export interface Settings {
   apiKey: string;
   maxIterations: number;
   darkMode: boolean;
+  modelSize: 'small' | 'large';
+  academicMode: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   apiKey: "",
   maxIterations: 5,
   darkMode: true,
+  modelSize: 'small',
+  academicMode: false,
 };
 
 /**

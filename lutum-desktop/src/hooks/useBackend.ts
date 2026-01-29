@@ -169,14 +169,14 @@ export function useBackend() {
    * Gibt session_title zurück für Session-Benennung.
    */
   const startResearch = useCallback(
-    async (message: string, apiKey: string, sessionId?: string): Promise<OverviewResponse | null> => {
+    async (message: string, apiKey: string, sessionId?: string, modelSize: string = 'small', academicMode: boolean = false): Promise<OverviewResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
       try {
         const response = await fetch(`${BACKEND_URL}/research/overview`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, api_key: apiKey, session_id: sessionId }),
+          body: JSON.stringify({ message, api_key: apiKey, session_id: sessionId, model_size: modelSize, academic_mode: academicMode }),
         });
 
         if (!response.ok) {
@@ -212,7 +212,9 @@ export function useBackend() {
       apiKey: string,
       sessionId?: string,
       onStatus?: (status: string) => void,
-      onSources?: (urls: string[]) => void
+      onSources?: (urls: string[]) => void,
+      modelSize: string = 'small',
+      academicMode: boolean = false
     ): Promise<PipelineResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -220,7 +222,7 @@ export function useBackend() {
         const response = await fetch(`${BACKEND_URL}/research/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, api_key: apiKey, session_id: sessionId, max_step: 3 }),
+          body: JSON.stringify({ message, api_key: apiKey, session_id: sessionId, max_step: 3, model_size: modelSize, academic_mode: academicMode }),
         });
 
         if (!response.ok) {
@@ -288,7 +290,9 @@ export function useBackend() {
       clarificationQuestions: string[],
       clarificationAnswers: string[],
       apiKey: string,
-      sessionId?: string
+      sessionId?: string,
+      modelSize: string = 'small',
+      academicMode: boolean = false
     ): Promise<PlanResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -302,6 +306,8 @@ export function useBackend() {
             clarification_answers: clarificationAnswers,
             api_key: apiKey,
             session_id: sessionId,
+            model_size: modelSize,
+            academic_mode: academicMode,
           }),
         });
 
@@ -336,7 +342,9 @@ export function useBackend() {
       contextState: ContextState,
       feedback: string,
       apiKey: string,
-      sessionId?: string
+      sessionId?: string,
+      modelSize: string = 'small',
+      academicMode: boolean = false
     ): Promise<PlanResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -349,6 +357,8 @@ export function useBackend() {
             feedback,
             api_key: apiKey,
             session_id: sessionId,
+            model_size: modelSize,
+            academic_mode: academicMode,
           }),
         });
 
@@ -387,7 +397,9 @@ export function useBackend() {
       onStatus?: (status: string) => void,
       onSources?: (urls: string[]) => void,
       onPointComplete?: (event: PointCompleteEvent) => void,
-      onSynthesisStart?: (event: SynthesisStartEvent) => void
+      onSynthesisStart?: (event: SynthesisStartEvent) => void,
+      modelSize: string = 'small',
+      academicMode: boolean = false
     ): Promise<DeepResearchResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -399,6 +411,8 @@ export function useBackend() {
             context_state: contextState,
             api_key: apiKey,
             session_id: sessionId,
+            model_size: modelSize,
+            academic_mode: academicMode,
           }),
         });
 

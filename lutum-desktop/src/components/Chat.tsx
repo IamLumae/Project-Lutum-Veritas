@@ -20,6 +20,9 @@ import {
   saveSessions,
   createSession,
 } from "../stores/sessions";
+// @ts-ignore
+import html2pdf from "html2pdf.js";
+import { saveSettings } from "../stores/settings";
 
 export function Chat() {
   // Sessions State
@@ -34,6 +37,75 @@ export function Chat() {
   // Timer State
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Settings State (Lifted for UI Controls)
+  const [modelSize, setModelSize] = useState<'small' | 'large'>('small');
+  const [academicMode, setAcademicMode] = useState(false);
+
+  // Init Settings State
+  useEffect(() => {
+    const s = loadSettings();
+    setModelSize(s.modelSize);
+    setAcademicMode(s.academicMode);
+  }, [settingsOpen]); // Refresh if settings modal changed something
+
+  // Helper: Persist Model Size
+  const handleModelChange = (size: 'small' | 'large') => {
+    setModelSize(size);
+    const s = loadSettings();
+    saveSettings({ ...s, modelSize: size });
+  };
+
+  // Helper: Persist Academic Mode
+  const handleAcademicToggle = () => {
+    const newVal = !academicMode;
+    setAcademicMode(newVal);
+    const s = loadSettings();
+    saveSettings({ ...s, academicMode: newVal });
+  };
+
+  // EXPORT HANDLERS
+  const handleExportMD = () => {
+    if (!activeSession?.messages) return;
+    const finalMsg = [...activeSession.messages].reverse().find(m => m.role === 'assistant' && !m.type);
+    if (!finalMsg) return;
+
+    const blob = new Blob([finalMsg.content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activeSession.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_synthesis.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPDF = () => {
+    // Finde das Element mit der ID "report-content" oder den Container der letzten Message
+    // Wir müssen dem ReportRenderer eine ID geben oder hier tricksen.
+    // Einfachheitshalber: Wir rendern den Content temporär in ein verstecktes Div für html2pdf
+
+    // Besser: Wir suchen im DOM nach dem gerenderten Report.
+    // Da wir MarkdownView/ReportView nutzen, sollten wir dort vielleicht exportieren?
+    // User will Button "MD/PDF" im Chat (Header oder Footer?).
+    // Der Plan sagt "Header or near final message".
+    // Ich nehme den Header.
+
+    const element = document.getElementById('report-container');
+    if (!element) {
+      alert("Kein Report gefunden zum Exportieren. Bitte warten bis Synthesis fertig ist.");
+      return;
+    }
+
+    const opt: any = {
+      margin: [10, 10],
+      filename: `${activeSession?.title || 'report'}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save();
+  };
 
   // Timer starten/stoppen basierend auf loading
   useEffect(() => {
@@ -206,13 +278,15 @@ export function Chat() {
             const sourcesMsg: Message = {
               id: crypto.randomUUID(),
               role: "assistant",
-              content: `Ich habe ${urls.length} relevante Quellen gefunden:`,
+              content: `Ich habe ${urls.length} relevanten Quellen gefunden:`,
               timestamp: new Date().toISOString(),
               type: "sources",
               sources: urls,
             };
             addMessage(sessionId, sourcesMsg);
-          }
+          },
+          modelSize,
+          academicMode
         );
 
         // Session-Titel vom LLM
@@ -254,7 +328,9 @@ export function Chat() {
           ctx.clarification_questions,
           [content],
           settings.apiKey,
-          sessionId
+          sessionId,
+          modelSize,
+          academicMode
         );
 
         if (planResult?.plan_points && planResult.plan_points.length > 0) {
@@ -292,7 +368,7 @@ export function Chat() {
 
         // User will Plan ändern
         const settings = loadSettings();
-        const reviseResult = await revisePlan(ctx, content, settings.apiKey, sessionId);
+        const reviseResult = await revisePlan(ctx, content, settings.apiKey, sessionId, modelSize, academicMode);
 
         if (reviseResult?.plan_points && reviseResult.plan_points.length > 0) {
           const planMsg: Message = {
@@ -387,7 +463,9 @@ export function Chat() {
           estimatedMinutes: event.estimatedMinutes,
         };
         addMessage(sessionId, synthMsg);
-      }
+      },
+      modelSize,
+      academicMode
     );
 
     // Finale Response
@@ -525,12 +603,55 @@ export function Chat() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Model Selector */}
+            <select
+              value={modelSize}
+              onChange={(e) => handleModelChange(e.target.value as 'small' | 'large')}
+              className="bg-[var(--bg-tertiary)] text-[var(--text-secondary)] text-sm border border-[var(--border)] rounded-md px-2 py-1 focus:outline-none focus:border-blue-500"
+              title="Modell-Größe wählen"
+            >
+              <option value="small">Small (Fast)</option>
+              <option value="large">Large (Deep)</option>
+            </select>
+
+            {/* Academic Toggle */}
+            <button
+              onClick={handleAcademicToggle}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-sm transition-colors ${academicMode
+                ? "bg-blue-900/30 border-blue-700 text-blue-300"
+                : "bg-transparent border-transparent text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                }`}
+              title="Academic Mode"
+            >
+              <span className={`w-2 h-2 rounded-full ${academicMode ? "bg-blue-400" : "bg-gray-600"}`} />
+              Academic
+            </button>
+
+            {/* Export Buttons */}
+            {activeSession?.phase === 'done' && (
+              <div className="flex items-center gap-1 border-l border-[var(--border)] pl-3 mr-2">
+                <button
+                  onClick={handleExportMD}
+                  className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-tertiary)] rounded"
+                  title="Export Markdown"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-tertiary)] rounded"
+                  title="Export PDF"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
+                </button>
+              </div>
+            )}
+
             {/* Connection Status */}
             <div className="flex items-center gap-1">
               <div
-                className={`w-2 h-2 rounded-full ${
-                  connected ? "bg-green-500" : "bg-red-500"
-                }`}
+                className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-red-500"
+                  }`}
               />
               <span className="text-[var(--text-secondary)] text-sm">
                 {connected ? "Verbunden" : "Offline"}
