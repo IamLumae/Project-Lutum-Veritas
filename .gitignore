@@ -2,75 +2,70 @@
 # Lutum Veritas - .gitignore
 # ================================
 
-# ---------- Build Outputs ----------
-dist/
-build/
-output/
-*.exe
-*.msi
-*.dmg
-*.AppImage
-*.deb
-*.rpm
-
-# ---------- Tauri / Rust ----------
-lutum-desktop/src-tauri/target/
-lutum-desktop/src-tauri/Cargo.lock
-*.pdb
-
-# ---------- Node / Frontend ----------
-node_modules/
-lutum-desktop/dist/
-*.tsbuildinfo
-.vite/
-
-# ---------- Python / Backend ----------
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-*.egg
-.eggs/
-*.whl
-venv/
-.venv/
-env/
-.env
-*.log
-
-# PyInstaller
-*.spec
-*.manifest
-
-# ---------- Research Data ----------
-final_synthesis_backups/
-scraped_data/
-*.jsonl
-SESSION_RECOVERED.json
-FINAL_SYNTHESIS_RECOVERED.md
-
-# ---------- IDE / Editor ----------
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
+############################
+# OS / Editor
+############################
 .DS_Store
 Thumbs.db
+*.log
 
-# ---------- Secrets / Config ----------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+############################
+# Secrets
+############################
 .env
-.env.local
-.env.*.local
-*.pem
+.env.*
+!.env.example
 *.key
-credentials.json
-secrets.json
+*.pem
+secrets.*
 
-# ---------- Misc ----------
-*.bak
-*.tmp
-*.temp
+############################
+# Python
+############################
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+.venv/
+venv/
+ENV/
+env/
+
+############################
+# Rust / Cargo / Tauri
+############################
+target/
+src-tauri/target/
+
+# Tauri build output
+src-tauri/dist/
+src-tauri/build/
+
+############################
+# Frontend / Node
+############################
+node_modules/
+dist/
+build/
+out/
+
+############################
+# Windows binaries / installers
+############################
+*.exe
+*.msi
+*.dll
+*.pdb
+
+############################
+# Misc caches
+############################
 .cache/
+.tmp/
+.tmp*/
+
