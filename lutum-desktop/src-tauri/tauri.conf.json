@@ -34,9 +34,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "binaries/lutum-backend.exe"
-    ],
     "windows": {
       "wix": null,
       "nsis": {

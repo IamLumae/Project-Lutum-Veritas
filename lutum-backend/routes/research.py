@@ -1657,10 +1657,8 @@ async def research_academic(request: AcademicResearchRequest):
                         for d in bereich_dossiers:
                             bereich_synthese += f"### {d['point']}\n\n{d['dossier']}\n\n"
 
-                    # Renummerierung für diesen Bereich
-                    bereich_synthese, source_counter = renumber_citations(
-                        bereich_synthese, bereich_sources, source_counter
-                    )
+                    # KEINE Renummerierung hier - die Dossiers haben bereits globale Nummern!
+                    # Die Bereichs-Synthese soll die globalen Citations aus den Dossiers beibehalten.
 
                     all_bereichs_synthesen.append({
                         "bereich_titel": bereich_titel,
@@ -1716,21 +1714,20 @@ async def research_academic(request: AcademicResearchRequest):
                 final_document = f"# {user_query[:100]}{'...' if len(user_query) > 100 else ''}\n\n"
                 final_document += "---\n\n"
 
-                # Alle Bereichs-Synthesen einfügen
+                # Alle Bereichs-Synthesen einfügen mit klaren Trennern
                 for i, s in enumerate(all_bereichs_synthesen, 1):
-                    final_document += f"# Bereich {i}: {s['bereich_titel']}\n\n"
+                    final_document += f"\n{'═' * 60}\n"
+                    final_document += f"# 📚 BEREICH {i}/{len(all_bereichs_synthesen)}: {s['bereich_titel']}\n"
+                    final_document += f"{'═' * 60}\n\n"
                     final_document += s['synthese']
-                    final_document += "\n\n---\n\n"
+                    final_document += "\n\n"
 
-                # Academic Conclusion als BESONDERER Bereich (wird im Frontend farblich markiert)
-                final_document += "# 🔮 QUERVERBINDUNGEN & CONCLUSION\n\n"
+                # Klarer Trenner vor Conclusion
+                final_document += f"\n{'█' * 60}\n"
+                final_document += "# 🔮 QUERVERBINDUNGEN & CONCLUSION\n"
+                final_document += f"{'█' * 60}\n\n"
                 final_document += academic_conclusion
-                final_document += "\n\n---\n\n"
-
-                # Quellenverzeichnis (NUR EINMAL am Ende!)
-                final_document += "# 📎 QUELLENVERZEICHNIS\n\n"
-                for num, url in sorted(source_registry.items()):
-                    final_document += f"[{num}] {url}\n"
+                # Quellenverzeichnis wird vom Frontend aus source_registry gerendert - NICHT hier!
 
             else:
                 final_document = "Keine Bereiche erfolgreich recherchiert."

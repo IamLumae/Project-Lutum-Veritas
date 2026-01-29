@@ -13,9 +13,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Model für Bereichs-Synthese (schnell aber gut)
-BEREICHS_SYNTHESIS_MODEL = "google/gemini-2.5-flash-preview-05-20"
-BEREICHS_SYNTHESIS_TIMEOUT = 120  # 2 Minuten pro Bereich
+# Model für Bereichs-Synthese (FINAL = qwen 235b wie Conclusion)
+BEREICHS_SYNTHESIS_MODEL = "qwen/qwen3-vl-235b-a22b-instruct"
+BEREICHS_SYNTHESIS_TIMEOUT = 180  # 3 Minuten pro Bereich (großes Modell)
 
 
 BEREICHS_SYNTHESIS_SYSTEM_PROMPT = """Du bist ein akademischer Forschungsassistent.
