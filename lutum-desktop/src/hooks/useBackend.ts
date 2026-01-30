@@ -508,7 +508,8 @@ export function useBackend() {
       academicMode: boolean = false,
       workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
       finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct',
-      language: string = 'de'
+      language: string = 'de',
+      baseUrl: string = 'https://openrouter.ai/api/v1/chat/completions'
     ): Promise<DeepResearchResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -525,6 +526,7 @@ export function useBackend() {
             work_model: workModel,
             final_model: finalModel,
             language: language,
+            base_url: baseUrl,
           }),
         });
 
@@ -628,7 +630,8 @@ export function useBackend() {
       onLog?: (event: LogEvent) => void,
       workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
       finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct',
-      language: string = 'de'
+      language: string = 'de',
+      baseUrl: string = 'https://openrouter.ai/api/v1/chat/completions'
     ): Promise<AcademicResearchResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -643,6 +646,7 @@ export function useBackend() {
             work_model: workModel,
             final_model: finalModel,
             language: language,
+            base_url: baseUrl,
           }),
         });
 
@@ -812,7 +816,8 @@ export function useBackend() {
     onSources?: (urls: string[]) => void,
     onPointComplete?: (event: PointCompleteEvent) => void,
     onSynthesisStart?: (event: SynthesisStartEvent) => void,
-    onLog?: (event: LogEvent) => void
+    onLog?: (event: LogEvent) => void,
+    baseUrl: string = 'https://openrouter.ai/api/v1/chat/completions'
   ): Promise<DeepResearchResponse | null> => {
     setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -824,7 +829,8 @@ export function useBackend() {
           session_id: sessionId,
           api_key: apiKey,
           work_model: workModel,
-          final_model: finalModel
+          final_model: finalModel,
+          base_url: baseUrl,
         }),
       });
 

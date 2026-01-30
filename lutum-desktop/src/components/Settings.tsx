@@ -14,6 +14,8 @@ import {
   loadSettings,
   saveSettings,
   applyDarkMode,
+  Provider,
+  PROVIDER_CONFIG,
 } from "../stores/settings";
 import { t, type Language } from "../i18n/translations";
 
@@ -53,12 +55,12 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     }
   }, [isOpen]);
 
-  // Fetch OpenRouter models when modal opens and API key exists
+  // Fetch OpenRouter models when modal opens and API key exists (only for OpenRouter)
   useEffect(() => {
-    if (isOpen && settings.apiKey) {
+    if (isOpen && settings.apiKey && settings.provider === 'openrouter') {
       fetchModels(settings.apiKey);
     }
-  }, [isOpen, settings.apiKey]);
+  }, [isOpen, settings.apiKey, settings.provider]);
 
   const lang = settings.language;
 
@@ -151,12 +153,23 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     onClose();
   };
 
-  // Refresh models when API key changes
+  // Refresh models when API key changes (only for OpenRouter)
   const handleApiKeyChange = (key: string) => {
     setSettings({ ...settings, apiKey: key });
-    if (key && key.startsWith("sk-")) {
+    if (settings.provider === 'openrouter' && key && key.startsWith("sk-")) {
       // Debounce fetch
       setTimeout(() => fetchModels(key), 500);
+    }
+  };
+
+  // Handle provider change
+  const handleProviderChange = (provider: Provider) => {
+    setSettings({ ...settings, provider });
+    // Clear models when switching away from OpenRouter
+    if (provider !== 'openrouter') {
+      setModels([]);
+    } else if (settings.apiKey) {
+      fetchModels(settings.apiKey);
     }
   };
 
@@ -169,20 +182,36 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
           {t('settingsTitle', lang)}
         </h2>
 
+        {/* Provider Selection */}
+        <div className="mb-5">
+          <label className="block text-[var(--text-secondary)] text-sm mb-2">
+            Provider
+          </label>
+          <select
+            value={settings.provider}
+            onChange={(e) => handleProviderChange(e.target.value as Provider)}
+            className="w-full bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {Object.entries(PROVIDER_CONFIG).map(([key, config]) => (
+              <option key={key} value={key}>{config.name}</option>
+            ))}
+          </select>
+        </div>
+
         {/* API Key */}
         <div className="mb-5">
           <label className="block text-[var(--text-secondary)] text-sm mb-2">
-            OpenRouter API Key
+            {PROVIDER_CONFIG[settings.provider].name} API Key
           </label>
           <input
             type="password"
             value={settings.apiKey}
             onChange={(e) => handleApiKeyChange(e.target.value)}
-            placeholder="sk-or-v1-..."
+            placeholder={PROVIDER_CONFIG[settings.provider].placeholder}
             className="w-full bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <p className="text-[var(--text-secondary)] text-xs mt-1.5">
-            {t('requiredForModelSelection', lang)}
+            {settings.provider === 'openrouter' ? t('requiredForModelSelection', lang) : 'Required for API calls'}
           </p>
         </div>
 
@@ -192,87 +221,132 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
             {t('modelSelection', lang)}
           </h3>
 
-          {modelsLoading && (
-            <div className="text-[var(--text-secondary)] text-sm mb-3">
-              {t('loadingModels', lang)}
-            </div>
-          )}
-
-          {modelsError && !models.length && (
-            <div className="text-amber-400 text-sm mb-3">
-              {modelsError}
-            </div>
-          )}
-
-          {/* Work Model Dropdown */}
-          <div className="mb-4">
-            <label className="block text-[var(--text-secondary)] text-sm mb-2">
-              {t('workModel', lang)}
-            </label>
-            <input
-              type="text"
-              value={workModelSearch}
-              onChange={(e) => setWorkModelSearch(e.target.value)}
-              placeholder={t('search', lang)}
-              className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2 mb-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <select
-              value={settings.workModel}
-              onChange={(e) => setSettings({ ...settings, workModel: e.target.value })}
-              className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {/* Keep current value as option even if not in filtered list */}
-              {!filteredWorkModels.find(m => m.id === settings.workModel) && (
-                <option value={settings.workModel}>{settings.workModel}</option>
+          {settings.provider === 'openrouter' ? (
+            <>
+              {/* OpenRouter: Dropdowns mit Suche */}
+              {modelsLoading && (
+                <div className="text-[var(--text-secondary)] text-sm mb-3">
+                  {t('loadingModels', lang)}
+                </div>
               )}
-              {filteredWorkModels.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name || model.id}{model.id === RECOMMENDED_WORK_MODEL ? ` (${t('recommended', lang)})` : ''}
-                </option>
-              ))}
-            </select>
-            <p className="text-[var(--text-secondary)] text-xs mt-1.5">
-              {t('workModelHelp', lang)}
-            </p>
-          </div>
 
-          {/* Final Model Dropdown */}
-          <div>
-            <label className="block text-[var(--text-secondary)] text-sm mb-2">
-              {t('finalModel', lang)}
-            </label>
-            <input
-              type="text"
-              value={finalModelSearch}
-              onChange={(e) => setFinalModelSearch(e.target.value)}
-              placeholder={t('search', lang)}
-              className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2 mb-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <select
-              value={settings.finalModel}
-              onChange={(e) => setSettings({ ...settings, finalModel: e.target.value })}
-              className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {/* Keep current value as option even if not in filtered list */}
-              {!filteredFinalModels.find(m => m.id === settings.finalModel) && (
-                <option value={settings.finalModel}>{settings.finalModel}</option>
+              {modelsError && !models.length && (
+                <div className="text-amber-400 text-sm mb-3">
+                  {modelsError}
+                </div>
               )}
-              {filteredFinalModels.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name || model.id}{model.id === RECOMMENDED_FINAL_MODEL ? ` (${t('recommended', lang)})` : ''}
-                </option>
-              ))}
-            </select>
-            <p className="text-[var(--text-secondary)] text-xs mt-1.5">
-              {t('finalModelHelp', lang)}
-            </p>
-          </div>
 
-          {/* Models count info */}
-          {models.length > 0 && (
-            <div className="mt-3 text-[var(--text-secondary)] text-xs">
-              {models.length} {t('modelsAvailable', lang)}
-            </div>
+              {/* Work Model Dropdown */}
+              <div className="mb-4">
+                <label className="block text-[var(--text-secondary)] text-sm mb-2">
+                  {t('workModel', lang)}
+                </label>
+                <input
+                  type="text"
+                  value={workModelSearch}
+                  onChange={(e) => setWorkModelSearch(e.target.value)}
+                  placeholder={t('search', lang)}
+                  className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2 mb-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <select
+                  value={settings.workModel}
+                  onChange={(e) => setSettings({ ...settings, workModel: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {!filteredWorkModels.find(m => m.id === settings.workModel) && (
+                    <option value={settings.workModel}>{settings.workModel}</option>
+                  )}
+                  {filteredWorkModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name || model.id}{model.id === RECOMMENDED_WORK_MODEL ? ` (${t('recommended', lang)})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[var(--text-secondary)] text-xs mt-1.5">
+                  {t('workModelHelp', lang)}
+                </p>
+              </div>
+
+              {/* Final Model Dropdown */}
+              <div>
+                <label className="block text-[var(--text-secondary)] text-sm mb-2">
+                  {t('finalModel', lang)}
+                </label>
+                <input
+                  type="text"
+                  value={finalModelSearch}
+                  onChange={(e) => setFinalModelSearch(e.target.value)}
+                  placeholder={t('search', lang)}
+                  className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2 mb-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <select
+                  value={settings.finalModel}
+                  onChange={(e) => setSettings({ ...settings, finalModel: e.target.value })}
+                  className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {!filteredFinalModels.find(m => m.id === settings.finalModel) && (
+                    <option value={settings.finalModel}>{settings.finalModel}</option>
+                  )}
+                  {filteredFinalModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name || model.id}{model.id === RECOMMENDED_FINAL_MODEL ? ` (${t('recommended', lang)})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[var(--text-secondary)] text-xs mt-1.5">
+                  {t('finalModelHelp', lang)}
+                </p>
+              </div>
+
+              {models.length > 0 && (
+                <div className="mt-3 text-[var(--text-secondary)] text-xs">
+                  {models.length} {t('modelsAvailable', lang)}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Other Providers: Text Inputs */}
+              <p className="text-[var(--text-secondary)] text-xs mb-4">
+                {lang === 'de'
+                  ? 'Gib die Modellnamen manuell ein (z.B. gpt-4, claude-3-opus, gemini-pro)'
+                  : 'Enter model names manually (e.g. gpt-4, claude-3-opus, gemini-pro)'}
+              </p>
+
+              {/* Work Model Input */}
+              <div className="mb-4">
+                <label className="block text-[var(--text-secondary)] text-sm mb-2">
+                  {t('workModel', lang)}
+                </label>
+                <input
+                  type="text"
+                  value={settings.workModel}
+                  onChange={(e) => setSettings({ ...settings, workModel: e.target.value })}
+                  placeholder="gpt-4o-mini, claude-3-haiku, gemini-1.5-flash..."
+                  className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-[var(--text-secondary)] text-xs mt-1.5">
+                  {t('workModelHelp', lang)}
+                </p>
+              </div>
+
+              {/* Final Model Input */}
+              <div>
+                <label className="block text-[var(--text-secondary)] text-sm mb-2">
+                  {t('finalModel', lang)}
+                </label>
+                <input
+                  type="text"
+                  value={settings.finalModel}
+                  onChange={(e) => setSettings({ ...settings, finalModel: e.target.value })}
+                  placeholder="gpt-4o, claude-3-opus, gemini-1.5-pro..."
+                  className="w-full bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border)] rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-[var(--text-secondary)] text-xs mt-1.5">
+                  {t('finalModelHelp', lang)}
+                </p>
+              </div>
+            </>
           )}
         </div>
 

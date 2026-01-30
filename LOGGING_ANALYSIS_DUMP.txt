@@ -1,0 +1,1478 @@
+================================================================================
+LOGGING & ERROR HANDLING ANALYSIS - LUTUM VERITAS
+================================================================================
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+
+Pattern Counts:
+----------------------------------------
+  py_log_call: 268
+  error_string: 225
+  py_try_except: 178
+  ts_try_catch: 60
+  py_logger_def: 28
+  py_logging_import: 26
+  ts_throw: 19
+  ts_error_class: 19
+  ts_console: 14
+  py_raise: 11
+  py_print_error: 10
+
+================================================================================
+IDENTIFIED PROBLEMS
+================================================================================
+
+- 28 verschiedene Logger-Definitionen (sollte zentral sein)
+- 14 console.log/warn/error Aufrufe im Frontend (kein persistentes Logging)
+- 10 print() statements für Errors (sollte logger sein)
+- 225 generische Error-Strings ohne spezifische Details
+
+HAUPTPROBLEME:
+1. KEINE zentrale Log-Datei die geschrieben wird
+2. KEINE strukturierte Error-Klassen
+3. Frontend zeigt nur generische Meldungen
+4. Exceptions werden oft nur geloggt, nicht behandelt
+5. Kein Error-Export für User-Support
+
+================================================================================
+DETAILED CODE DUMP BY FILE
+================================================================================
+
+
+================================================================================
+FILE: analyze_logging.py
+================================================================================
+
+  [error_string] (16 hits)
+  ----------------------------------------
+    L25: "py_log_call": r"(logger\.(debug|info|warning|warn|error|critical|exception)\s*\(.*)",
+    L29: "py_print_error": r"(print\s*\(.*[Ee]rror.*\)|print\s*\(.*[Ff]ail.*\))",
+    L32: "ts_console": r"(console\.(log|warn|error|debug|info)\s*\(.*)",
+    L35: "ts_error_class": r"(class\s+\w*Error|new\s+Error\()",
+    L38: "error_string": r"['\"].*([Ee]rror|[Ff]ailed|[Ff]ailure).*['\"]",
+    L52: content = filepath.read_text(encoding="utf-8", errors="ignore")
+    L71: results["_scan_error"] = [{"error": str(e)}]
+    L135: problems.append(f"- {stats['ts_console']} console.log/warn/error Aufrufe im Frontend (kein persistentes Logging)")
+    L137: if stats.get("py_print_error", 0) > 0:
+    L138: problems.append(f"- {stats['py_print_error']} print() statements für Errors (sollte logger sein)")
+    L143: for matches in results.get("error_string", []):
+    L144: if any(x in matches.get("content", "").lower() for x in ["failed", "error", "geht nicht", "fehlgeschlagen"]):
+    L148: problems.append(f"- {generic_errors} generische Error-Strings ohne spezifische Details")
+    L156: output_lines.append("2. KEINE strukturierte Error-Klassen")
+    L159: output_lines.append("5. Kein Error-Export für User-Support")
+    L198: print(f"  - Total logging/error patterns found: {sum(stats.values())}")
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L26: "py_logging_import": r"(import logging|from.*log.*import)",
+
+  [py_print_error] (2 hits)
+  ----------------------------------------
+    L138: problems.append(f"- {stats['py_print_error']} print() statements für Errors (sollte logger sein)")
+    L198: print(f"  - Total logging/error patterns found: {sum(stats.values())}")
+
+  [py_try_except] (3 hits)
+  ----------------------------------------
+    L27: "py_try_except": r"(try:|except.*:|except:)",
+    L51: try:
+    L70: except Exception as e:
+
+================================================================================
+FILE: lutum-backend\main.py
+================================================================================
+
+  [error_string] (3 hits)
+  ----------------------------------------
+    L58: ['powershell', '-Command', f'Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue'],
+    L76: print(f"[WARN] Zombie killer failed: {e}")
+    L141: print(f"[ERROR] pip install failed: {e}")
+
+  [py_log_call] (3 hits)
+  ----------------------------------------
+    L173: logger.info("Lutum Veritas Backend starting...")
+    L174: logger.info("Server ready on http://localhost:8420")
+    L176: logger.info("Lutum Veritas Backend shutting down...")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L167: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L162: from lutum.core.log_config import get_logger
+
+  [py_print_error] (2 hits)
+  ----------------------------------------
+    L76: print(f"[WARN] Zombie killer failed: {e}")
+    L141: print(f"[ERROR] pip install failed: {e}")
+
+  [py_try_except] (6 hits)
+  ----------------------------------------
+    L35: try:
+    L75: except Exception as e:
+    L113: try:
+    L115: except ImportError:
+    L123: try:
+    L140: except subprocess.CalledProcessError as e:
+
+================================================================================
+FILE: lutum-backend\routes\chat.py
+================================================================================
+
+  [error_string] (5 hits)
+  ----------------------------------------
+    L39: logger.error(f"Failed to create LutumService: {e}")
+    L119: logger.error(f"Processing failed: {e}")
+    L122: error="Processing failed. Please try again."
+    L127: logger.error(f"Unexpected error in chat endpoint: {e}", exc_info=True)
+    L128: raise HTTPException(status_code=500, detail="Internal server error")
+
+  [py_log_call] (8 hits)
+  ----------------------------------------
+    L31: logger.debug("Creating LutumService instance")
+    L35: logger.debug("LutumService created")
+    L39: logger.error(f"Failed to create LutumService: {e}")
+    L95: logger.debug(f"Chat request received: {request.message[:100] if request.message else 'EMPTY'}...")
+    L104: logger.info(f"Chat response: {len(result.get('response', '')):,} chars")
+    L114: logger.warning(f"Invalid request: {e}")
+    L119: logger.error(f"Processing failed: {e}")
+    L127: logger.error(f"Unexpected error in chat endpoint: {e}", exc_info=True)
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L20: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L17: from lutum.core.log_config import get_logger
+
+  [py_raise] (2 hits)
+  ----------------------------------------
+    L115: raise HTTPException(status_code=400, detail="Invalid request parameters")
+    L128: raise HTTPException(status_code=500, detail="Internal server error")
+
+  [py_try_except] (6 hits)
+  ----------------------------------------
+    L33: try:
+    L38: except Exception as e:
+    L97: try:
+    L112: except ValueError as e:
+    L117: except RuntimeError as e:
+    L125: except Exception as e:
+
+================================================================================
+FILE: lutum-backend\routes\health.py
+================================================================================
+
+  [error_string] (3 hits)
+  ----------------------------------------
+    L41: logger.error(f"Health check failed: {e}")
+    L43: "status": "error",
+    L45: "error": str(e)
+
+  [py_log_call] (3 hits)
+  ----------------------------------------
+    L30: logger.debug("Health check requested")
+    L37: logger.debug("Health check OK")
+    L41: logger.error(f"Health check failed: {e}")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L15: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L13: from lutum.core.log_config import get_logger
+
+  [py_try_except] (2 hits)
+  ----------------------------------------
+    L32: try:
+    L40: except Exception as e:
+
+================================================================================
+FILE: lutum-backend\routes\research.py
+================================================================================
+
+  [error_string] (55 hits)
+  ----------------------------------------
+    L59: "think_failed": {"de": "[{idx}] Think fehlgeschlagen, überspringe...", "en": "[{idx}] Think failed, skipping..."},
+    L73: "dossier_failed": {"de": "[{idx}] Dossier-Erstellung fehlgeschlagen", "en": "[{idx}] Dossier creation failed"},
+    L79: "synthesis_failed_fallback": {"de": "Final Synthesis fehlgeschlagen, nutze Fallback...", "en": "Final synthesis failed, using fallback..."},
+    L147: event_type: z.B. "step_start", "step_done", "error"
+    L297: error=result.get("error")
+    L304: logger.error(f"Research overview failed: {e}", exc_info=True)
+    L305: raise HTTPException(status_code=500, detail="Internal server error")
+    L355: yield json.dumps({"type": "error", "message": "Message cannot be empty"}) + "\n"
+    L359: context = {"user_message": user_message, "error": None}
+    L367: if context.get("error"):
+    L368: yield json.dumps({"type": "error", "message": context["error"]}) + "\n"
+    L385: if context.get("error"):
+    L386: yield json.dumps({"type": "error", "message": context["error"]}) + "\n"
+    L424: "error": context.get("error")
+    L429: logger.error(f"Pipeline failed: {e}", exc_info=True)
+    L431: yield json.dumps({"type": "error", "message": "Research pipeline failed. Please try again."}) + "\n"
+    L502: if result.get("error"):
+    L504: emit_event(sid, "error", f"Academic Plan fehlgeschlagen: {result['error']}")
+    L505: return PlanResponse(error=result["error"])
+    L530: if result.get("error"):
+    L532: emit_event(sid, "error", f"Plan-Erstellung fehlgeschlagen: {result['error']}")
+    L533: return PlanResponse(error=result["error"])
+    L551: logger.error(f"Plan creation failed: {e}", exc_info=True)
+    L552: raise HTTPException(status_code=500, detail="Internal server error")
+    L594: if result.get("error"):
+    L596: emit_event(sid, "error", f"Plan-Überarbeitung fehlgeschlagen: {result['error']}")
+    L597: return PlanResponse(error=result["error"])
+    L614: logger.error(f"Plan revision failed: {e}", exc_info=True)
+    L615: raise HTTPException(status_code=500, detail="Internal server error")
+    L704: logger.error(f"LLM error (no choices): {result}")
+    L707: logger.error(f"LLM call failed: {e}")
+    L756: yield json.dumps({"type": "error", "message": "No research plan" if lang == "en" else "Kein Recherche-Plan vorhanden"}) + "\n"
+    L882: yield json.dumps({"type": "status", "message": t("think_failed", lang, idx=point_index)}) + "\n"
+    L889: "skip_reason": "Think LLM failed" if lang == "en" else "Think LLM fehlgeschlagen",
+    L1090: "skip_reason": "Scraping failed" if lang == "en" else "Scraping fehlgeschlagen",
+    L1124: yield json.dumps({"type": "status", "message": t("dossier_failed", lang, idx=point_index)}) + "\n"
+    L1131: "skip_reason": "Dossier LLM failed" if lang == "en" else "Dossier LLM fehlgeschlagen",
+    L1246: yield json.dumps({"type": "status", "message": t("synthesis_failed_fallback", lang)}) + "\n"
+    L1252: final_document = "No dossiers created - research failed." if lang == "en" else "Keine Dossiers erstellt - Recherche fehlgeschlagen."
+    L1274: "error": None
+    L1279: logger.error(f"Deep Research failed: {e}", exc_info=True)
+    L1284: yield json.dumps({"type": "error", "message": "Deep research failed. Please try again."}) + "\n"
+    L1346: logger.warning(f"Failed to parse checkpoint {session_dir.name}: {e}")
+    L1354: logger.error(f"[SESSIONS] Failed to list sessions: {e}")
+    L1385: logger.error(f"[RECOVERY] Failed to load session {session_id}: {e}")
+    L1426: return {"error": f"Session {request.session_id} nicht gefunden"}
+    L1432: return {"error": "Keine ausstehenden Punkte - Session ist bereits fertig"}
+    L1558: logger.error(f"LLM error (no choices): {result}")
+    L1561: logger.error(f"LLM call failed: {e}")
+    L1577: yield json.dumps({"type": "error", "message": "No academic areas in context" if lang == "en" else "Keine Academic Bereiche im Context"}) + "\n"
+    L1657: "skip_reason": "Think failed" if lang == "en" else "Think fehlgeschlagen",
+    L1874: academic_conclusion = "# Conclusion\n\nConclusion synthesis failed." if lang == "en" else "# Conclusion\n\nConclusion-Synthese fehlgeschlagen."
+    L1916: "error": None
+    L1921: logger.error(f"Academic Research failed: {e}", exc_info=True)
+    L1925: yield json.dumps({"type": "error", "message": "Academic research failed. Please try again."}) + "\n"
+
+  [py_log_call] (64 hits)
+  ----------------------------------------
+    L108: logger.warning(f"Missing translation key: {key}")
+    L115: logger.warning(f"Missing format arg for {key}: {e}")
+    L156: logger.debug(f"Event emitted: {session_id} -> {event_type}: {message}")
+    L158: logger.warning(f"Event queue full for session {session_id}")
+    L172: logger.info(f"SSE connection opened for session: {session_id}")
+    L177: logger.debug(f"Created event queue for session {session_id} in SSE handler")
+    L207: logger.info(f"SSE connection closed for session: {session_id}")
+    L263: logger.debug(f"Research overview request: {request.message[:100] if request.message else 'EMPTY'}...")
+    L270: logger.warning("Empty message received")
+    L291: logger.info(f"Overview response: {len(result.get('queries_initial', []))} queries")
+    L304: logger.error(f"Research overview failed: {e}", exc_info=True)
+    L346: logger.info(f"Pipeline request (streaming): {request.message[:100] if request.message else 'EMPTY'}...")
+    L383: logger.info("Browser session closed (RAM cleanup)")
+    L429: logger.error(f"Pipeline failed: {e}", exc_info=True)
+    L475: logger.info(f"Plan request ({mode_str}): {request.user_query[:100]}...")
+    L551: logger.error(f"Plan creation failed: {e}", exc_info=True)
+    L574: logger.info(f"Plan revision request: {request.feedback[:100]}...")
+    L614: logger.error(f"Plan revision failed: {e}", exc_info=True)
+    L700: logger.warning(f"LLM returned null content (finish_reason={finish_reason}, refusal={message.get('refusal', 'none')}, model={model})")
+    L702: logger.warning(f"LLM returned empty string (finish_reason={finish_reason}, model={model})")
+    L704: logger.error(f"LLM error (no choices): {result}")
+    L707: logger.error(f"LLM call failed: {e}")
+    L714: logger.info("Deep Research Pipeline started")
+    L739: logger.info(f"[CHECKPOINT] Saved for session {session_id}: {len(data.get('completed_dossiers', []))} dossiers")
+    L813: logger.info(f"[SESSION] ID: {session_id}")
+    L816: logger.info(f"[RESUME] Continuing session with {len(completed_dossiers)} existing dossiers, {len(research_plan)} remaining")
+    L878: logger.info(f"[{point_index}] TIMING: Think LLM took {time.time() - step_start:.1f}s")
+    L879: logger.info(f"[{point_index}] [THINK] RAW LLM RESPONSE:\n{think_response[:2000] if think_response else 'NONE'}")
+    L895: logger.info(f"[{point_index}] [THINK] PARSED QUERIES: {search_queries}")
+    L921: logger.info(f"[{point_index}] TIMING: Search took {time.time() - step_start:.1f}s")
+    L949: logger.info(f"[{point_index}] === STEP C: Pick URLs START ===")
+    L953: logger.info(f"[{point_index}] Building pick_urls prompt...")
+    L962: logger.info(f"[{point_index}] Calling LLM for pick_urls...")
+    L972: logger.info(f"[{point_index}] LLM returned, parsing response...")
+    L973: logger.info(f"[{point_index}] RAW LLM RESPONSE:\n{pick_response[:2000] if pick_response else 'NONE'}")
+    L976: logger.info(f"[{point_index}] PARSED URLs: {selected_urls}")
+    L977: logger.info(f"[{point_index}] === STEP C DONE: Pick URLs took {time.time() - step_start:.1f}s, got {len(selected_urls)} URLs ===")
+    L1014: logger.info(f"[{point_index}] Browser closed (RAM cleanup after retry)")
+    L1064: logger.info(f"[{point_index}] === STEP D: Scrape URLs START === URLs: {selected_urls}")
+    L1069: logger.info(f"[{point_index}] === STEP D DONE: Scrape took {time.time() - step_start:.1f}s for {len(selected_urls)} URLs, got {len(scraped_contents)} contents ===")
+    L1070: logger.info(f"[{point_index}] [SCRAPE] RESULTS: {[(url[:40], len(content) if content else 0) for url, content in scraped_contents.items()]}")
+    L1098: logger.info(f"[{point_index}] === STEP E: Dossier START ===")
+    L1102: logger.info(f"[{point_index}] Building dossier prompt with {len(scraped_text_parts)} sources...")
+    L1110: logger.info(f"[{point_index}] Calling LLM for dossier...")
+    L1120: logger.info(f"[{point_index}] === STEP E DONE: Dossier LLM took {time.time() - step_start:.1f}s ===")
+    L1121: logger.info(f"[{point_index}] [DOSSIER] RAW LLM RESPONSE ({len(dossier_response) if dossier_response else 0} chars):\n{dossier_response[:2000] if dossier_response else 'NONE'}...")
+    L1138: logger.info(f"[{point_index}] [DOSSIER] PARSED: dossier={len(dossier_text)} chars, learnings={len(key_learnings)} chars, citations={len(citations)}")
+    L1139: logger.info(f"[{point_index}] [DOSSIER] KEY LEARNINGS:\n{key_learnings[:500] if key_learnings else 'NONE'}...")
+    L1147: logger.info(f"[{point_index}] [RENUMBER] Citations renumbered, next global num: {source_counter}")
+    L1231: logger.info(f"TIMING: Final Synthesis took {time.time() - step_start:.1f}s")
+    L1232: logger.info(f"[FINAL] RAW LLM RESPONSE ({len(final_document) if final_document else 0} chars)")
+    L1242: logger.info(f"[FINAL] Backup saved to {backup_file}")
+    L1264: logger.info(f"[DONE] Source Registry has {len(source_registry)} entries")
+    L1279: logger.error(f"Deep Research failed: {e}", exc_info=True)
+    L1346: logger.warning(f"Failed to parse checkpoint {session_dir.name}: {e}")
+    L1354: logger.error(f"[SESSIONS] Failed to list sessions: {e}")
+    L1372: logger.info(f"[RECOVERY] Loaded session {session_id}: {len(data.get('completed_dossiers', []))} dossiers")
+    L1385: logger.error(f"[RECOVERY] Failed to load session {session_id}: {e}")
+    L1516: logger.info("Academic Research Pipeline started")
+    L1554: logger.warning(f"LLM returned null content (finish_reason={finish_reason}, refusal={message.get('refusal', 'none')}, model={model})")
+    L1556: logger.warning(f"LLM returned empty string (finish_reason={finish_reason}, model={model})")
+    L1558: logger.error(f"LLM error (no choices): {result}")
+    L1561: logger.error(f"LLM call failed: {e}")
+    L1921: logger.error(f"Academic Research failed: {e}", exc_info=True)
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L41: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L23: from lutum.core.log_config import get_logger, get_and_clear_log_buffer
+
+  [py_raise] (4 hits)
+  ----------------------------------------
+    L271: raise HTTPException(status_code=400, detail="Message cannot be empty")
+    L305: raise HTTPException(status_code=500, detail="Internal server error")
+    L552: raise HTTPException(status_code=500, detail="Internal server error")
+    L615: raise HTTPException(status_code=500, detail="Internal server error")
+
+  [py_try_except] (32 hits)
+  ----------------------------------------
+    L112: try:
+    L114: except KeyError as e:
+    L151: try:
+    L157: except asyncio.QueueFull:
+    L181: try:
+    L186: try:
+    L199: except asyncio.TimeoutError:
+    L268: try:
+    L300: except HTTPException:
+    L303: except Exception as e:
+    L353: try:
+    L428: except Exception as e:
+    L480: try:
+    L550: except Exception as e:
+    L579: try:
+    L613: except Exception as e:
+    L674: try:
+    L706: except Exception as e:
+    L750: try:
+    L771: source_registry: dict[int, str] = {}  # {1: "url1", 2: "url2", ...}
+    L1278: except Exception as e:
+    L1324: try:
+    L1335: try:
+    L1345: except Exception as e:
+    L1353: except Exception as e:
+    L1361: try:
+    L1384: except Exception as e:
+    L1528: try:
+    L1560: except Exception as e:
+    L1570: try:
+    L1589: source_registry: dict[int, str] = {}
+    L1920: except Exception as e:
+
+================================================================================
+FILE: lutum-backend\services\lutum_service.py
+================================================================================
+
+  [error_string] (2 hits)
+  ----------------------------------------
+    L81: self.logger.error(f"Unexpected error processing message: {e}", exc_info=True)
+    L82: raise RuntimeError(f"Processing failed: {e}")
+
+  [py_log_call] (5 hits)
+  ----------------------------------------
+    L32: self.logger.debug("LutumService initialized")
+    L55: self.logger.debug(f"Processing message: {message[:100] if message else 'EMPTY'}...")
+    L60: self.logger.warning("Empty message received")
+    L64: self.logger.info(f"Starting pipeline with max_step={max_iterations}")
+    L81: self.logger.error(f"Unexpected error processing message: {e}", exc_info=True)
+
+  [py_logger_def] (2 hits)
+  ----------------------------------------
+    L19: logger = get_logger(__name__)
+    L31: self.logger = get_logger(f"{__name__}.LutumService")
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L16: from lutum.core.log_config import get_logger
+
+  [py_raise] (2 hits)
+  ----------------------------------------
+    L61: raise ValueError("Message cannot be empty")
+    L82: raise RuntimeError(f"Processing failed: {e}")
+
+  [py_try_except] (3 hits)
+  ----------------------------------------
+    L57: try:
+    L77: except ValueError:
+    L80: except Exception as e:
+
+================================================================================
+FILE: lutum-desktop\src\components\Chat.tsx
+================================================================================
+
+  [error_string] (8 hits)
+  ----------------------------------------
+    L104: alert(t('exportFailed', language) + err);
+    L371: alert(t('pdfExportFailed', language) + err);
+    L565: const responseText = pipelineResult?.response || pipelineResult?.error || t('researchError', language);
+    L628: content: planResult?.error || t('planFailed', language),
+    L662: content: reviseResult?.error || t('planFailed', language),
+    L808: content: t('researchErrorPrefix', language) + result.error,
+    L924: content: t('researchErrorPrefix', language) + result.error,
+    L1050: content: t('synthesisLoadFailed', language) + (result?.error || (language === 'de' ? 'Unbekannter Fehler' : 'Unknown error')),
+
+  [ts_try_catch] (4 hits)
+  ----------------------------------------
+    L92: try {
+    L103: } catch (err) {
+    L133: try {
+    L370: } catch (err) {
+
+================================================================================
+FILE: lutum-desktop\src\components\MessageList.tsx
+================================================================================
+
+  [ts_console] (1 hits)
+  ----------------------------------------
+    L67: console.warn('Blocked potentially unsafe URL:', url);
+
+  [ts_try_catch] (4 hits)
+  ----------------------------------------
+    L32: try {
+    L71: try {
+    L139: try {
+    L210: try {
+
+================================================================================
+FILE: lutum-desktop\src\components\ReportRenderer.tsx
+================================================================================
+
+  [ts_console] (1 hits)
+  ----------------------------------------
+    L483: console.warn('Blocked potentially unsafe URL:', url);
+
+  [ts_try_catch] (3 hits)
+  ----------------------------------------
+    L427: try {
+    L458: try {
+    L487: try {
+
+================================================================================
+FILE: lutum-desktop\src\components\Settings.tsx
+================================================================================
+
+  [error_string] (1 hits)
+  ----------------------------------------
+    L96: console.error("Failed to fetch models:", error);
+
+  [ts_console] (1 hits)
+  ----------------------------------------
+    L96: console.error("Failed to fetch models:", error);
+
+  [ts_error_class] (1 hits)
+  ----------------------------------------
+    L84: throw new Error(`API Error: ${response.status}`);
+
+  [ts_throw] (1 hits)
+  ----------------------------------------
+    L84: throw new Error(`API Error: ${response.status}`);
+
+  [ts_try_catch] (3 hits)
+  ----------------------------------------
+    L76: try {
+    L95: } catch (error) {
+    L98: } finally {
+
+================================================================================
+FILE: lutum-desktop\src\hooks\useBackend.ts
+================================================================================
+
+  [error_string] (10 hits)
+  ----------------------------------------
+    L19: if (lowerMsg.includes('fetch') || lowerMsg.includes('network') || lowerMsg.includes('failed to fetch')) {
+    L54: if (msg.length < 100 && !lowerMsg.includes('error')) {
+    L364: } else if (parsed.type === "error") {
+    L368: console.warn("Failed to parse stream line:", line);
+    L590: } else if (parsed.type === "error") {
+    L594: console.warn("Failed to parse stream line:", line);
+    L726: } else if (parsed.type === "error") {
+    L730: console.warn("Failed to parse stream line:", line);
+    L804: console.error("Failed to list sessions:", e);
+    L876: } else if (event.type === "error") {
+
+  [ts_console] (4 hits)
+  ----------------------------------------
+    L368: console.warn("Failed to parse stream line:", line);
+    L594: console.warn("Failed to parse stream line:", line);
+    L730: console.warn("Failed to parse stream line:", line);
+    L804: console.error("Failed to list sessions:", e);
+
+  [ts_error_class] (18 hits)
+  ----------------------------------------
+    L242: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L280: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L328: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L333: if (!reader) throw new Error("No response body");
+    L365: throw new Error(parsed.message);
+    L421: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L472: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L535: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L540: if (!reader) throw new Error("No response body");
+    L591: throw new Error(parsed.message);
+    L655: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L660: if (!reader) throw new Error("No response body");
+    L727: throw new Error(parsed.message);
+    L773: throw new Error(`HTTP ${response.status}`);
+    L801: if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    L838: throw new Error(`HTTP ${response.status}`);
+    L843: if (!reader) throw new Error("No reader");
+    L877: throw new Error(event.message);
+
+  [ts_throw] (18 hits)
+  ----------------------------------------
+    L242: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L280: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L328: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L333: if (!reader) throw new Error("No response body");
+    L365: throw new Error(parsed.message);
+    L421: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L472: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L535: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L540: if (!reader) throw new Error("No response body");
+    L591: throw new Error(parsed.message);
+    L655: throw new Error(errorData.detail || `HTTP ${response.status}`);
+    L660: if (!reader) throw new Error("No response body");
+    L727: throw new Error(parsed.message);
+    L773: throw new Error(`HTTP ${response.status}`);
+    L801: if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    L838: throw new Error(`HTTP ${response.status}`);
+    L843: if (!reader) throw new Error("No reader");
+    L877: throw new Error(event.message);
+
+  [ts_try_catch] (36 hits)
+  ----------------------------------------
+    L189: try {
+    L208: } catch (e) {
+    L229: try {
+    L241: const errorData = await response.json().catch(() => ({}));
+    L254: } catch (e) {
+    L271: try {
+    L279: const errorData = await response.json().catch(() => ({}));
+    L292: } catch (e) {
+    L319: try {
+    L327: const errorData = await response.json().catch(() => ({}));
+    L346: try {
+    L367: } catch (parseErr) {
+    L380: } catch (e) {
+    L404: try {
+    L420: const errorData = await response.json().catch(() => ({}));
+    L433: } catch (e) {
+    L456: try {
+    L471: const errorData = await response.json().catch(() => ({}));
+    L484: } catch (e) {
+    L516: try {
+    L534: const errorData = await response.json().catch(() => ({}));
+    L553: try {
+    L593: } catch (parseErr) {
+    L606: } catch (e) {
+    L638: try {
+    L654: const errorData = await response.json().catch(() => ({}));
+    L673: try {
+    L729: } catch (parseErr) {
+    L742: } catch (e) {
+    L762: try {
+    L781: } catch (e) {
+    L799: try {
+    L803: } catch (e) {
+    L824: try {
+    L856: try {
+    L887: } catch (e) {
+
+================================================================================
+FILE: lutum-desktop\src\hooks\useResearchEvents.ts
+================================================================================
+
+  [error_string] (2 hits)
+  ----------------------------------------
+    L12: type: "connected" | "step_start" | "step_progress" | "step_done" | "error" | "done" | "ping";
+    L50: console.error("Failed to parse SSE event:", e, event.data);
+
+  [ts_console] (2 hits)
+  ----------------------------------------
+    L40: console.log("SSE Event:", parsed); // Debug
+    L50: console.error("Failed to parse SSE event:", e, event.data);
+
+  [ts_try_catch] (2 hits)
+  ----------------------------------------
+    L36: try {
+    L49: } catch (e) {
+
+================================================================================
+FILE: lutum-desktop\src\i18n\translations.ts
+================================================================================
+
+  [error_string] (4 hits)
+  ----------------------------------------
+    L94: exportFailed: "Export failed: ",
+    L96: pdfExportFailed: "PDF export failed: ",
+    L98: researchError: "Research error",
+    L107: researchErrorPrefix: "**Research error:**\n\n",
+
+================================================================================
+FILE: lutum-desktop\src\stores\sessions.ts
+================================================================================
+
+  [error_string] (2 hits)
+  ----------------------------------------
+    L147: console.error("Failed to load sessions:", e);
+    L171: console.error("Failed to save sessions:", e);
+
+  [ts_console] (3 hits)
+  ----------------------------------------
+    L138: console.log(`[Sessions] Loaded ${migratedSessions.length} sessions from localStorage`);
+    L147: console.error("Failed to load sessions:", e);
+    L171: console.error("Failed to save sessions:", e);
+
+  [ts_try_catch] (4 hits)
+  ----------------------------------------
+    L97: try {
+    L146: } catch (e) {
+    L168: try {
+    L170: } catch (e) {
+
+================================================================================
+FILE: lutum-desktop\src\stores\settings.ts
+================================================================================
+
+  [error_string] (2 hits)
+  ----------------------------------------
+    L74: console.error("Failed to load settings:", e);
+    L88: console.error("Failed to save settings:", e);
+
+  [ts_console] (2 hits)
+  ----------------------------------------
+    L74: console.error("Failed to load settings:", e);
+    L88: console.error("Failed to save settings:", e);
+
+  [ts_try_catch] (4 hits)
+  ----------------------------------------
+    L68: try {
+    L73: } catch (e) {
+    L83: try {
+    L87: } catch (e) {
+
+================================================================================
+FILE: lutum\analyzer\web_analyzer.py
+================================================================================
+
+  [error_string] (9 hits)
+  ----------------------------------------
+    L111: logger.error(f"Scrape failed: {url} - {e}")
+    L160: logger.error(f"LLM error response: {result}")
+    L171: logger.error(f"LLM request failed: {e}")
+    L174: logger.error(f"LLM unexpected error: {e}")
+    L223: logger.error(f"Failed to save output: {e}")
+    L261: raise RuntimeError(f"Scraping failed for {url}")
+    L275: raise RuntimeError(f"LLM call failed for {url}")
+    L331: logger.error(f"Analysis failed: {e}")
+    L335: logger.error(f"Unexpected error: {e}", exc_info=True)
+
+  [py_log_call] (17 hits)
+  ----------------------------------------
+    L98: logger.debug(f"Starting scrape: {url}")
+    L104: logger.warning(f"Scrape returned empty: {url}")
+    L107: logger.info(f"Scrape successful: {len(raw_text):,} chars from {url}")
+    L111: logger.error(f"Scrape failed: {url} - {e}")
+    L128: logger.debug(f"Calling LLM: {MODEL}, max_tokens={max_tokens}")
+    L160: logger.error(f"LLM error response: {result}")
+    L164: logger.info(f"LLM response: {len(answer):,} chars")
+    L168: logger.error("LLM request timeout (120s)")
+    L171: logger.error(f"LLM request failed: {e}")
+    L174: logger.error(f"LLM unexpected error: {e}")
+    L197: logger.warning(f"Could not create output dir: {e}")
+    L219: logger.info(f"Saved to: {output_file}")
+    L223: logger.error(f"Failed to save output: {e}")
+    L252: logger.debug(f"analyze_url called: url={url}, query={user_query}")
+    L312: logger.debug(f"CLI args: {args}")
+    L331: logger.error(f"Analysis failed: {e}")
+    L335: logger.error(f"Unexpected error: {e}", exc_info=True)
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L28: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L19: from lutum.core.log_config import get_logger
+
+  [py_raise] (2 hits)
+  ----------------------------------------
+    L261: raise RuntimeError(f"Scraping failed for {url}")
+    L275: raise RuntimeError(f"LLM call failed for {url}")
+
+  [py_try_except] (13 hits)
+  ----------------------------------------
+    L100: try:
+    L110: except Exception as e:
+    L139: try:
+    L167: except requests.Timeout:
+    L170: except requests.RequestException as e:
+    L173: except Exception as e:
+    L194: try:
+    L196: except Exception as e:
+    L205: try:
+    L222: except Exception as e:
+    L316: try:
+    L330: except RuntimeError as e:
+    L334: except Exception as e:
+
+================================================================================
+FILE: lutum\core\__init__.py
+================================================================================
+
+  [error_string] (2 hits)
+  ----------------------------------------
+    L15: "ExtractionError",
+    L16: "DependencyError",
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L8: from lutum.core.log_config import get_logger
+
+================================================================================
+FILE: lutum\core\exceptions.py
+================================================================================
+
+  [error_string] (1 hits)
+  ----------------------------------------
+    L30: super().__init__(f"Extraction failed for {url}: {message}")
+
+================================================================================
+FILE: lutum\core\log_config.py
+================================================================================
+
+  [py_log_call] (3 hits)
+  ----------------------------------------
+    L170: root_logger.debug("Logging konfiguriert (Level: %s)", logging.getLevelName(level))
+    L185: logger.info("Das ist eine Info")
+    L186: logger.error("Das ist ein Fehler", exc_info=True)
+
+  [py_logger_def] (6 hits)
+  ----------------------------------------
+    L14: logger = get_logger(__name__)
+    L95: root_logger = logging.getLogger("lutum")
+    L155: root_logger = logging.getLogger("lutum")
+    L173: def get_logger(name: str) -> logging.Logger:
+    L184: logger = get_logger(__name__)
+    L196: return logging.getLogger(name)
+
+  [py_logging_import] (3 hits)
+  ----------------------------------------
+    L13: from lutum.core.log_config import get_logger
+    L17: from lutum.core.log_config import get_and_clear_log_buffer
+    L21: import logging
+
+  [py_try_except] (4 hits)
+  ----------------------------------------
+    L55: try:
+    L65: except Exception:
+    L145: try:
+    L150: except Exception as e:
+
+================================================================================
+FILE: lutum\core\security.py
+================================================================================
+
+  [error_string] (2 hits)
+  ----------------------------------------
+    L131: logger.warning(f"URL validation error: {e}")
+    L337: 'sanitize_error',
+
+  [py_log_call] (2 hits)
+  ----------------------------------------
+    L131: logger.warning(f"URL validation error: {e}")
+    L262: logger.warning(f"Potential prompt injection detected: {pattern}")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L18: logger = logging.getLogger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L16: import logging
+
+  [py_try_except] (4 hits)
+  ----------------------------------------
+    L66: try:
+    L100: try:
+    L124: except ValueError:
+    L130: except Exception as e:
+
+================================================================================
+FILE: lutum\extractor\content.py
+================================================================================
+
+  [py_log_call] (12 hits)
+  ----------------------------------------
+    L46: self.logger.debug("trafilatura geladen")
+    L48: self.logger.error("trafilatura nicht installiert")
+    L69: self.logger.warning("Leeres HTML übergeben")
+    L73: self.logger.warning(f"HTML ist kein String: {type(html)}")
+    L77: self.logger.debug(f"Extrahiere Content aus {len(html)} Bytes HTML")
+    L92: self.logger.debug("trafilatura gab keinen Content zurück")
+    L98: self.logger.debug(
+    L103: self.logger.debug(f"Content extrahiert: {len(content)} Zeichen")
+    L108: self.logger.error(f"Extraction fehlgeschlagen: {e}", exc_info=True)
+    L131: self.logger.warning("Fallback auf einfache Tag-Entfernung")
+    L147: self.logger.debug(f"Fallback-Content: {len(text)} Zeichen")
+    L153: self.logger.error(f"Fallback fehlgeschlagen: {e}", exc_info=True)
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L38: self.logger = get_logger(f"{__name__}.{self.__class__.__name__}")
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L12: from lutum.core.log_config import get_logger
+
+  [py_raise] (1 hits)
+  ----------------------------------------
+    L49: raise DependencyError(
+
+  [py_try_except] (6 hits)
+  ----------------------------------------
+    L43: try:
+    L47: except ImportError as e:
+    L76: try:
+    L106: except Exception as e:
+    L133: try:
+    L152: except Exception as e:
+
+================================================================================
+FILE: lutum\researcher\clarify.py
+================================================================================
+
+  [error_string] (10 hits)
+  ----------------------------------------
+    L47: logger.error(f"Format scraped failed: {e}")
+    L113: logger.error(f"LLM error: {result}")
+    L126: logger.error(f"LLM call failed: {e}")
+    L159: "error": "No URLs scraped successfully"
+    L173: "error": "LLM call failed"
+    L182: "error": None
+    L186: logger.error(f"get_clarification failed: {e}")
+    L191: "error": str(e)
+    L213: if result["error"]:
+    L214: print(f"Error: {result['error']}")
+
+  [py_log_call] (12 hits)
+  ----------------------------------------
+    L27: logger.debug(f"Formatting {len(scraped)} scraped pages for LLM")
+    L47: logger.error(f"Format scraped failed: {e}")
+    L88: logger.debug("Calling LLM for clarification...")
+    L113: logger.error(f"LLM error: {result}")
+    L117: logger.info(f"LLM clarification: {len(answer)} chars")
+    L118: logger.info(f"[CLARIFY] RAW LLM RESPONSE:\n{answer}")
+    L122: logger.error("LLM timeout")
+    L126: logger.error(f"LLM call failed: {e}")
+    L145: logger.info(f"get_clarification called: {len(urls)} URLs")
+    L154: logger.warning("No URLs could be scraped")
+    L176: logger.info(f"Clarification complete: {success_count} pages scraped")
+    L186: logger.error(f"get_clarification failed: {e}")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L17: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L13: from lutum.core.log_config import get_logger
+
+  [py_print_error] (1 hits)
+  ----------------------------------------
+    L214: print(f"Error: {result['error']}")
+
+  [py_try_except] (7 hits)
+  ----------------------------------------
+    L29: try:
+    L46: except Exception as e:
+    L95: try:
+    L121: except requests.Timeout:
+    L125: except Exception as e:
+    L147: try:
+    L185: except Exception as e:
+
+================================================================================
+FILE: lutum\researcher\context_state.py
+================================================================================
+
+  [py_log_call] (3 hits)
+  ----------------------------------------
+    L48: logger.debug(f"Added {len(questions)} clarification questions")
+    L53: logger.debug(f"Added {len(answers)} user answers")
+    L59: logger.debug(f"Set research plan v{self.plan_version} with {len(plan_points)} points")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L16: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L14: from lutum.core.log_config import get_logger
+
+================================================================================
+FILE: lutum\researcher\overview.py
+================================================================================
+
+  [error_string] (11 hits)
+  ----------------------------------------
+    L89: logger.error(f"Response parsing failed: {e}")
+    L128: logger.error(f"LLM error: {result}")
+    L141: logger.error(f"LLM request failed: {e}")
+    L145: logger.error(f"LLM unexpected error: {e}")
+    L174: "error": "LLM call failed"
+    L186: "error": "No queries extracted"
+    L195: "error": None
+    L199: logger.error(f"get_overview_queries failed: {e}")
+    L204: "error": str(e)
+    L228: if result["error"]:
+    L229: print(f"\nError: {result['error']}")
+
+  [py_log_call] (17 hits)
+  ----------------------------------------
+    L61: logger.debug(f"Parsing response ({len(response)} chars)")
+    L73: logger.debug(f"Extracted session title: {session_title}")
+    L82: logger.debug(f"Extracted query: {query[:50]}...")
+    L84: logger.info(f"Parsed session='{session_title}', {len(queries)} queries")
+    L85: logger.info(f"[OVERVIEW] PARSED QUERIES: {queries}")
+    L89: logger.error(f"Response parsing failed: {e}")
+    L104: logger.debug(f"Calling LLM for overview: {user_message[:100]}...")
+    L128: logger.error(f"LLM error: {result}")
+    L132: logger.info(f"LLM response: {len(answer)} chars")
+    L133: logger.info(f"[OVERVIEW] RAW LLM RESPONSE:\n{answer}")
+    L137: logger.error("LLM timeout (60s)")
+    L141: logger.error(f"LLM request failed: {e}")
+    L145: logger.error(f"LLM unexpected error: {e}")
+    L163: logger.info(f"get_overview_queries called: {user_message[:100]}...")
+    L181: logger.warning("No queries extracted from response")
+    L189: logger.info(f"Overview complete: '{session_title}', {len(queries)} queries generated")
+    L199: logger.error(f"get_overview_queries failed: {e}")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L16: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L13: from lutum.core.log_config import get_logger
+
+  [py_print_error] (1 hits)
+  ----------------------------------------
+    L229: print(f"\nError: {result['error']}")
+
+  [py_try_except] (8 hits)
+  ----------------------------------------
+    L66: try:
+    L88: except Exception as e:
+    L108: try:
+    L136: except requests.Timeout:
+    L140: except requests.RequestException as e:
+    L144: except Exception as e:
+    L165: try:
+    L198: except Exception as e:
+
+================================================================================
+FILE: lutum\researcher\pipeline.py
+================================================================================
+
+  [error_string] (17 hits)
+  ----------------------------------------
+    L85: logger.error(f"Failed to load step: {e}")
+    L102: context["error"] = f"Step {step_num} not found"
+    L114: context["error"] = f"Failed to load step {step_num}"
+    L140: if result.get("error"):
+    L141: logger.warning(f"Step {step_num} returned error: {result['error']}")
+    L151: logger.error(f"Step {step_num} failed: {e}", exc_info=True)
+    L152: context["error"] = str(e)
+    L200: "error": None,
+    L219: if context.get("error"):
+    L220: emit("error", f"Fehler: {context['error']}")
+    L221: logger.error(f"Pipeline stopped at step {step_num}: {context['error']}")
+    L243: emit("error", f"Pipeline fehlgeschlagen: {e}")
+    L244: logger.error(f"Pipeline failed: {e}", exc_info=True)
+    L245: context["error"] = str(e)
+    L292: if context.get("error"):
+    L295: lines.append(f"**Fehler:** {context['error']}")
+    L300: logger.error(f"Format response failed: {e}")
+
+  [py_log_call] (17 hits)
+  ----------------------------------------
+    L68: logger.debug(f"Loading step: {module_name}.{function_name}")
+    L77: logger.error(f"Module not found: {module_name} - {e}")
+    L81: logger.error(f"Function not found: {function_name} in {module_name} - {e}")
+    L85: logger.error(f"Failed to load step: {e}")
+    L101: logger.error(f"Step {step_num} not found in registry")
+    L108: logger.info(f"=== STEP {step_num}: {step_name.upper()} ===")
+    L141: logger.warning(f"Step {step_num} returned error: {result['error']}")
+    L147: logger.info(f"Step {step_num} complete")
+    L151: logger.error(f"Step {step_num} failed: {e}", exc_info=True)
+    L189: logger.info(f"Pipeline started: max_step={max_step}")
+    L190: logger.info(f"User message: {user_message[:100]}...")
+    L209: logger.warning(f"Step {step_num} not implemented yet")
+    L221: logger.error(f"Pipeline stopped at step {step_num}: {context['error']}")
+    L239: logger.info(f"Pipeline complete: {len(context)} keys in context")
+    L244: logger.error(f"Pipeline failed: {e}", exc_info=True)
+    L259: logger.debug("Formatting pipeline response")
+    L300: logger.error(f"Format response failed: {e}")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L22: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L20: from lutum.core.log_config import get_logger
+
+  [py_try_except] (10 hits)
+  ----------------------------------------
+    L70: try:
+    L76: except ImportError as e:
+    L80: except AttributeError as e:
+    L84: except Exception as e:
+    L110: try:
+    L150: except Exception as e:
+    L205: try:
+    L242: except Exception as e:
+    L261: try:
+    L299: except Exception as e:
+
+================================================================================
+FILE: lutum\researcher\plan.py
+================================================================================
+
+  [error_string] (12 hits)
+  ----------------------------------------
+    L122: logger.error(f"LLM error: {result}")
+    L133: logger.error(f"LLM call failed: {e}")
+    L169: return {"error": "LLM call failed", "plan_points": []}
+    L183: "error": None,
+    L187: logger.error(f"Plan generation failed: {e}", exc_info=True)
+    L188: return {"error": str(e), "plan_points": []}
+    L223: return {"error": "LLM call failed", "plan_points": []}
+    L232: "error": None,
+    L236: logger.error(f"Plan revision failed: {e}", exc_info=True)
+    L237: return {"error": str(e), "plan_points": []}
+    L305: if result.get("error"):
+    L306: print(f"Error: {result['error']}")
+
+  [py_log_call] (14 hits)
+  ----------------------------------------
+    L122: logger.error(f"LLM error: {result}")
+    L126: logger.info(f"[PLAN] RAW LLM RESPONSE:\n{answer[:2000]}...")
+    L130: logger.error("LLM timeout")
+    L133: logger.error(f"LLM call failed: {e}")
+    L151: logger.info("Creating research plan...")
+    L163: logger.debug(f"Plan prompt length: {len(user_prompt)} chars")
+    L171: logger.debug(f"Plan response: {raw_response[:200]}...")
+    L177: logger.warning(f"Only {len(plan_points)} plan points found, expected at least 5")
+    L187: logger.error(f"Plan generation failed: {e}", exc_info=True)
+    L202: logger.info(f"Revising research plan based on feedback: {user_feedback[:100]}...")
+    L236: logger.error(f"Plan revision failed: {e}", exc_info=True)
+    L265: logger.debug(f"Parsed {len(points)} plan points")
+    L266: logger.info(f"[PLAN] PARSED POINTS: {len(points)} points")
+    L268: logger.info(f"[PLAN] POINT {i}: {p[:100]}...")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L18: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L14: from lutum.core.log_config import get_logger
+
+  [py_print_error] (1 hits)
+  ----------------------------------------
+    L306: print(f"Error: {result['error']}")
+
+  [py_try_except] (7 hits)
+  ----------------------------------------
+    L100: try:
+    L129: except requests.Timeout:
+    L132: except Exception as e:
+    L153: try:
+    L186: except Exception as e:
+    L204: try:
+    L235: except Exception as e:
+
+================================================================================
+FILE: lutum\researcher\prompts\academic_conclusion.py
+================================================================================
+
+  [py_log_call] (1 hits)
+  ----------------------------------------
+    L189: logger.info(f"Academic Conclusion prompt: {len(user_prompt)} chars, {len(bereichs_synthesen)} areas, {total_sources} sources")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L25: logger = logging.getLogger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L23: import logging
+
+================================================================================
+FILE: lutum\researcher\prompts\academic_plan.py
+================================================================================
+
+  [error_string] (12 hits)
+  ----------------------------------------
+    L190: error_msg = result.get("error", {}).get("message", str(result))
+    L191: logger.error(f"LLM error: {error_msg}")
+    L192: return None, f"OpenRouter error: {error_msg}"
+    L202: logger.error(f"LLM call failed: {e}", exc_info=True)
+    L203: return None, f"LLM call failed: {str(e)}"
+    L245: return {"error": llm_error, "bereiche": {}}
+    L248: return {"error": "Empty response from LLM", "bereiche": {}}
+    L263: "error": None,
+    L267: logger.error(f"Academic plan generation failed: {e}", exc_info=True)
+    L268: return {"error": str(e), "bereiche": {}}
+    L358: if result.get("error"):
+    L359: print(f"Error: {result['error']}")
+
+  [py_log_call] (11 hits)
+  ----------------------------------------
+    L187: logger.info(f"[ACADEMIC PLAN] OpenRouter response status: {response.status_code}")
+    L191: logger.error(f"LLM error: {error_msg}")
+    L195: logger.info(f"[ACADEMIC PLAN] RAW LLM RESPONSE:\n{answer[:2000]}...")
+    L199: logger.error("LLM timeout after 90s")
+    L202: logger.error(f"LLM call failed: {e}", exc_info=True)
+    L220: logger.info("Creating ACADEMIC research plan with autonomous areas...")
+    L240: logger.debug(f"Academic plan prompt length: {len(user_prompt)} chars")
+    L254: logger.warning(f"Only {len(bereiche)} areas found, expected at least 3")
+    L257: logger.info(f"[ACADEMIC PLAN] Parsed {len(bereiche)} areas with {total_points} total points")
+    L267: logger.error(f"Academic plan generation failed: {e}", exc_info=True)
+    L325: logger.info(f"[ACADEMIC PLAN] Area '{bereich_titel}': {len(punkte)} points")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L27: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L23: from lutum.core.log_config import get_logger
+
+  [py_print_error] (1 hits)
+  ----------------------------------------
+    L359: print(f"Error: {result['error']}")
+
+  [py_try_except] (5 hits)
+  ----------------------------------------
+    L161: try:
+    L198: except requests.Timeout:
+    L201: except Exception as e:
+    L222: try:
+    L266: except Exception as e:
+
+================================================================================
+FILE: lutum\researcher\prompts\bereichs_synthesis.py
+================================================================================
+
+  [py_log_call] (1 hits)
+  ----------------------------------------
+    L104: logger.debug(f"Bereichs-Synthesis prompt for '{bereich_titel}': {len(user_prompt)} chars")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L14: logger = logging.getLogger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L12: import logging
+
+================================================================================
+FILE: lutum\researcher\prompts\meta_synthesis.py
+================================================================================
+
+  [py_log_call] (1 hits)
+  ----------------------------------------
+    L436: logger.info(f"[META-SYNTHESIS] Parsed: {metadata}")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L21: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L18: from lutum.core.log_config import get_logger
+
+================================================================================
+FILE: lutum\researcher\prompts\report_parser.py
+================================================================================
+
+  [py_try_except] (8 hits)
+  ----------------------------------------
+    L330: try:
+    L349: except (ValueError, AttributeError):
+    L490: try:
+    L494: except ValueError:
+    L520: try:
+    L543: except (ValueError, AttributeError):
+    L633: try:
+    L660: except Exception:
+
+================================================================================
+FILE: lutum\researcher\scraper.py
+================================================================================
+
+  [error_string] (17 hits)
+  ----------------------------------------
+    L42: "error": None
+    L49: "error": "Empty content or scrape failed"
+    L57: "error": "Timeout"
+    L61: logger.error(f"Scrape failed for {url[:50]}: {e}")
+    L65: "error": str(e)
+    L91: "error": "No URLs provided"
+    L109: logger.error(f"Scraper thread failed for '{url[:50]}': {e}")
+    L113: "error": str(e)
+    L122: "error": None
+    L126: logger.error(f"scrape_urls failed: {e}")
+    L130: "error": str(e)
+    L153: error = result.get("error")
+    L158: lines.append(f"[FEHLER: {error}]")
+    L174: logger.error(f"Format scrape results failed: {e}")
+    L196: status = "OK" if r["content"] else f"FAIL: {r['error']}"
+    L202: if result["error"]:
+    L203: print(f"Error: {result['error']}")
+
+  [py_log_call] (13 hits)
+  ----------------------------------------
+    L30: logger.debug(f"Scraping: {url[:80]}...")
+    L38: logger.info(f"Scraped {url[:50]}: {len(content)} chars")
+    L45: logger.warning(f"Empty content from: {url[:50]}")
+    L53: logger.warning(f"Scrape timeout: {url[:50]}")
+    L61: logger.error(f"Scrape failed for {url[:50]}: {e}")
+    L84: logger.info(f"scrape_urls called: {len(urls)} URLs, {max_workers} workers")
+    L87: logger.warning("No URLs to scrape")
+    L109: logger.error(f"Scraper thread failed for '{url[:50]}': {e}")
+    L117: logger.info(f"Scraping complete: {success_count}/{len(urls)} successful")
+    L126: logger.error(f"scrape_urls failed: {e}")
+    L145: logger.debug(f"Formatting {len(scraped_results)} scrape results for LLM")
+    L170: logger.info(f"Formatted scrape results: {len(formatted)} chars total")
+    L174: logger.error(f"Format scrape results failed: {e}")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L16: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L13: from lutum.core.log_config import get_logger
+
+  [py_print_error] (1 hits)
+  ----------------------------------------
+    L203: print(f"Error: {result['error']}")
+
+  [py_try_except] (9 hits)
+  ----------------------------------------
+    L32: try:
+    L52: except TimeoutError:
+    L60: except Exception as e:
+    L96: try:
+    L105: try:
+    L108: except Exception as e:
+    L125: except Exception as e:
+    L147: try:
+    L173: except Exception as e:
+
+================================================================================
+FILE: lutum\researcher\search.py
+================================================================================
+
+  [error_string] (14 hits)
+  ----------------------------------------
+    L69: logger.error(f"DDG search failed: {query[:30]} - {e}")
+    L110: logger.warning(f"Google search failed: {query[:30]} - {e}")
+    L144: logger.warning(f"Bing search failed: {query[:30]} - {e}")
+    L241: logger.error(f"Result formatting failed: {e}")
+    L351: logger.error(f"LLM error: {result}")
+    L364: logger.error(f"LLM call failed: {e}")
+    L404: logger.error(f"URL parsing failed: {e}")
+    L440: "error": "Keine Suchergebnisse gefunden"
+    L454: "error": "LLM call failed"
+    L466: "error": None
+    L470: logger.error(f"get_initial_data failed: {e}")
+    L475: "error": str(e)
+    L498: if result["error"]:
+    L499: print(f"\nError: {result['error']}")
+
+  [py_log_call] (32 hits)
+  ----------------------------------------
+    L45: logger.debug(f"DDG search: {clean_query[:40]}...")
+    L65: logger.info(f"DDG '{clean_query[:30]}...': {len(formatted)} results")
+    L69: logger.error(f"DDG search failed: {query[:30]} - {e}")
+    L88: logger.debug(f"Google search: {clean_query[:40]}...")
+    L106: logger.info(f"Google '{clean_query[:30]}...': {len(formatted)} results")
+    L110: logger.warning(f"Google search failed: {query[:30]} - {e}")
+    L123: logger.debug(f"Bing search: {clean_query[:40]}...")
+    L140: logger.info(f"Bing '{clean_query[:30]}...': {len(formatted)} results")
+    L144: logger.warning(f"Bing search failed: {query[:30]} - {e}")
+    L176: logger.info(f"Executing {len(queries)} DDG searches...")
+    L183: logger.info(f"[{i}/{len(queries)}] DDG: {query[:40]}...")
+    L186: logger.info(f"[{i}/{len(queries)}] {len(results)} results")
+    L194: logger.info(f"DDG SEARCH COMPLETE: {total_results} results from {len(queries)} queries in {duration:.1f}s")
+    L202: logger.debug("_close_google_session called (no-op, using duckduckgo-search library)")
+    L220: logger.debug("Formatting search results for LLM")
+    L241: logger.error(f"Result formatting failed: {e}")
+    L313: logger.debug("Calling LLM to pick URLs...")
+    L351: logger.error(f"LLM error: {result}")
+    L355: logger.info(f"LLM picked URLs: {len(answer)} chars response")
+    L356: logger.info(f"[SEARCH] RAW LLM RESPONSE:\n{answer}")
+    L360: logger.error("LLM timeout")
+    L364: logger.error(f"LLM call failed: {e}")
+    L380: logger.debug("Parsing URLs from LLM response")
+    L381: logger.debug(f"Response preview: {response[:200]}...")
+    L397: logger.debug(f"Extracted URL: {url[:60]}...")
+    L399: logger.info(f"Parsed {len(urls)} URLs")
+    L400: logger.info(f"[SEARCH] PARSED URLs: {urls}")
+    L404: logger.error(f"URL parsing failed: {e}")
+    L428: logger.info(f"get_initial_data called: {len(queries)} queries")
+    L435: logger.warning("No search results found")
+    L460: logger.info(f"Initial data complete: {len(urls)} URLs picked")
+    L470: logger.error(f"get_initial_data failed: {e}")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L22: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L19: from lutum.core.log_config import get_logger
+
+  [py_print_error] (1 hits)
+  ----------------------------------------
+    L499: print(f"\nError: {result['error']}")
+
+  [py_try_except] (15 hits)
+  ----------------------------------------
+    L40: try:
+    L68: except Exception as e:
+    L84: try:
+    L109: except Exception as e:
+    L119: try:
+    L143: except Exception as e:
+    L222: try:
+    L240: except Exception as e:
+    L333: try:
+    L359: except requests.Timeout:
+    L363: except Exception as e:
+    L386: try:
+    L403: except Exception as e:
+    L430: try:
+    L469: except Exception as e:
+
+================================================================================
+FILE: lutum\scrapers\base.py
+================================================================================
+
+  [error_string] (1 hits)
+  ----------------------------------------
+    L90: self.logger.warning(f"Scrape fehlgeschlagen: {error}")
+
+  [py_log_call] (8 hits)
+  ----------------------------------------
+    L47: self.logger.debug(f"Initialisiert: {self.name} (Level {self.level})")
+    L83: self.logger.debug(f"Start scrape: {url}")
+    L90: self.logger.warning(f"Scrape fehlgeschlagen: {error}")
+    L94: self.logger.warning("Leeres HTML erhalten")
+    L97: self.logger.debug(f"HTML erhalten: {len(html)} Bytes")
+    L103: self.logger.info(f"Scrape erfolgreich: {len(content)} Zeichen")
+    L106: self.logger.warning("Content-Extraktion ergab keinen gültigen Content")
+    L111: self.logger.error(f"Unerwarteter Fehler: {e}", exc_info=True)
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L44: self.logger = get_logger(f"{__name__}.{self.__class__.__name__}")
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L13: from lutum.core.log_config import get_logger
+
+  [py_try_except] (2 hits)
+  ----------------------------------------
+    L85: try:
+    L109: except Exception as e:
+
+================================================================================
+FILE: lutum\scrapers\camoufox_scraper.py
+================================================================================
+
+  [error_string] (4 hits)
+  ----------------------------------------
+    L191: self.logger.error(f"Raw scrape failed: {e}")
+    L335: logger.warning(f"  [{i}/{total}] FAILED in {time.time() - start:.1f}s: {safe_error[:50]}")
+    L340: logger.error(f"Scrape failed: {e}")
+    L351: logger.warning(f"Browser close failed: {e}, returning {len(results)} results anyway")
+
+  [py_log_call] (21 hits)
+  ----------------------------------------
+    L61: self.logger.error("camoufox not installed: pip install camoufox[geoip]")
+    L83: self.logger.warning(f"Blocked unsafe URL: {url[:100]}")
+    L93: self.logger.debug(f"Loading: {url}")
+    L112: self.logger.debug(f"Got HTML: {len(html)} chars")
+    L154: self.logger.warning(f"Blocked unsafe URL: {url[:100]}")
+    L191: self.logger.error(f"Raw scrape failed: {e}")
+    L268: logger.warning(f"URL list truncated: {len(urls)} -> {MAX_URLS_PER_BATCH}")
+    L275: logger.warning(f"Blocked {blocked_count} unsafe URLs (SSRF protection)")
+    L278: logger.warning("No safe URLs to scrape after validation")
+    L284: logger.error("camoufox not installed")
+    L293: logger.info(f"Scraping {total} URLs (sequential, {timeout}s timeout each)...")
+    L306: logger.info(f"  [{i}/{total}] Scraping: {url[:60]}...")
+    L325: logger.warning(f"  [{i}/{total}] Response truncated to {MAX_RESPONSE_SIZE} bytes")
+    L328: logger.info(f"  [{i}/{total}] OK: {len(text)} chars in {time.time() - start:.1f}s")
+    L330: logger.warning(f"  [{i}/{total}] EMPTY in {time.time() - start:.1f}s")
+    L335: logger.warning(f"  [{i}/{total}] FAILED in {time.time() - start:.1f}s: {safe_error[:50]}")
+    L337: logger.info(f"Scraping done, closing browser...")
+    L340: logger.error(f"Scrape failed: {e}")
+    L347: logger.info(f"Browser closed, {len(results)}/{total} successful")
+    L349: logger.warning(f"Browser close timed out, returning {len(results)} results anyway")
+    L351: logger.warning(f"Browser close failed: {e}, returning {len(results)} results anyway")
+
+  [py_logger_def] (1 hits)
+  ----------------------------------------
+    L261: logger = get_logger(__name__)
+
+  [py_logging_import] (1 hits)
+  ----------------------------------------
+    L260: from lutum.core.log_config import get_logger
+
+  [py_try_except] (28 hits)
+  ----------------------------------------
+    L56: try:
+    L60: except ImportError:
+    L66: try:
+    L69: except ImportError:
+    L89: try:
+    L116: except asyncio.TimeoutError:
+    L119: except Exception as e:
+    L129: try:
+    L131: except RuntimeError as e:
+    L133: try:
+    L137: except ImportError:
+    L161: try:
+    L182: try:
+    L184: except:
+    L190: except Exception as e:
+    L194: try:
+    L196: except RuntimeError as e:
+    L198: try:
+    L202: except ImportError:
+    L281: try:
+    L283: except ImportError:
+    L291: try:
+    L308: try:
+    L332: except Exception as e:
+    L339: except Exception as e:
+    L345: try:
+    L348: except asyncio.TimeoutError:
+    L350: except Exception as e:

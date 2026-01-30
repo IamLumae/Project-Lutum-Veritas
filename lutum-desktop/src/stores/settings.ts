@@ -9,11 +9,42 @@ const STORAGE_KEY = "lutum-settings";
 
 import type { Language } from '../i18n/translations';
 
+export type Provider = 'openrouter' | 'openai' | 'anthropic' | 'google' | 'huggingface';
+
+export const PROVIDER_CONFIG: Record<Provider, { name: string; baseUrl: string; placeholder: string }> = {
+  openrouter: {
+    name: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    placeholder: 'sk-or-v1-...'
+  },
+  openai: {
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1/chat/completions',
+    placeholder: 'sk-...'
+  },
+  anthropic: {
+    name: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com/v1/messages',
+    placeholder: 'sk-ant-...'
+  },
+  google: {
+    name: 'Google Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    placeholder: 'AIza...'
+  },
+  huggingface: {
+    name: 'HuggingFace',
+    baseUrl: 'https://api-inference.huggingface.co/v1/chat/completions',
+    placeholder: 'hf_...'
+  },
+};
+
 export interface Settings {
   apiKey: string;
   darkMode: boolean;
   modelSize: 'small' | 'large'; // Legacy - kept for backwards compatibility
   academicMode: boolean;
+  provider: Provider;  // API Provider
   workModel: string;   // Modell für Vorarbeit (Think, Pick URLs, Dossier)
   finalModel: string;  // Modell für Final Synthesis
   language: Language;  // UI + Prompt Sprache
@@ -24,6 +55,7 @@ const DEFAULT_SETTINGS: Settings = {
   darkMode: true,
   modelSize: 'small',
   academicMode: false,
+  provider: 'openrouter',
   workModel: "google/gemini-2.5-flash-lite-preview-09-2025",
   finalModel: "qwen/qwen3-vl-235b-a22b-instruct",
   language: 'de',

@@ -10,7 +10,7 @@ import { MessageList } from "./MessageList";
 import { InputBar } from "./InputBar";
 import { Settings } from "./Settings";
 import { useBackend } from "../hooks/useBackend";
-import { initDarkMode, loadSettings } from "../stores/settings";
+import { initDarkMode, loadSettings, PROVIDER_CONFIG } from "../stores/settings";
 import { t, type Language } from "../i18n/translations";
 import {
   SessionsState,
@@ -168,17 +168,25 @@ export function Chat() {
         const headerLine = tableLines[0];
         const separatorLine = tableLines[1];
 
-        // Check if it's a valid table
+        // Check if it's a valid table (separator line must have dashes)
         if (!headerLine.includes('|') || !separatorLine.match(/^\|?[\s-:|]+\|?$/)) return null;
 
         const parseRow = (line: string): string[] => {
-          return line.split('|')
-            .map(cell => cell.trim())
-            .filter((_, i, arr) => i > 0 && i < arr.length - (line.endsWith('|') ? 1 : 0) || !line.startsWith('|'));
+          const cells = line.split('|').map(cell => cell.trim());
+          // Remove empty first/last cells from leading/trailing pipes
+          if (cells.length > 0 && cells[0] === '') cells.shift();
+          if (cells.length > 0 && cells[cells.length - 1] === '') cells.pop();
+          return cells;
         };
 
         const headers = parseRow(headerLine).map(h => h.replace(/\*\*/g, ''));
-        const rows = tableLines.slice(2).map(line => parseRow(line).map(c => c.replace(/\*\*/g, '')));
+        // Skip empty rows and filter out separator line
+        const rows = tableLines.slice(2)
+          .filter(line => line.trim() && !line.match(/^\|?[\s-:|]+\|?$/))
+          .map(line => parseRow(line).map(c => c.replace(/\*\*/g, '')));
+
+        // Validate: headers and rows should have same column count
+        if (headers.length === 0) return null;
 
         return { headers, rows };
       };
@@ -239,8 +247,11 @@ export function Chat() {
           continue;
         }
 
-        // Check for table start (line with |)
-        if (line.includes('|') && line.trim().startsWith('|')) {
+        // Check for table start (line with | AND next line is separator with -)
+        const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
+        const isTableStart = line.includes('|') && nextLine.includes('|') && nextLine.includes('-');
+
+        if (isTableStart) {
           // Collect all table lines
           const tableLines: string[] = [];
           while (i < lines.length && lines[i].includes('|')) {
@@ -273,6 +284,9 @@ export function Chat() {
 
             // Update yPos after table
             yPos = (doc as any).lastAutoTable.finalY + 8;
+          } else {
+            // Failed to parse as table, rewind and process as normal text
+            i -= tableLines.length;
           }
           continue;
         }
@@ -759,7 +773,8 @@ export function Chat() {
         undefined,  // onLog - not used currently
         settings.workModel,
         settings.finalModel,
-        language
+        language,
+        PROVIDER_CONFIG[settings.provider].baseUrl
       );
 
       // Ergebnis verarbeiten
@@ -865,7 +880,8 @@ export function Chat() {
       academicMode,
       settings.workModel,
       settings.finalModel,
-      language
+      language,
+      PROVIDER_CONFIG[settings.provider].baseUrl
     );
 
     // Finale Response

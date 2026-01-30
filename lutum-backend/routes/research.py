@@ -621,10 +621,11 @@ class DeepResearchRequest(BaseModel):
     """Request für Deep Research Pipeline."""
     context_state: dict = Field(..., description="Context State mit Plan")
     session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
-    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    api_key: str = Field(..., description="API Key", max_length=200)
     work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="Modell für Vorarbeit (Think, Pick URLs, Dossier)", max_length=100)
     final_model: str = Field("qwen/qwen3-vl-235b-a22b-instruct", description="Modell für Final Synthesis", max_length=100)
     language: str = Field("de", description="Language for status messages (de/en)")
+    base_url: str = Field("https://openrouter.ai/api/v1/chat/completions", description="API Base URL")
 
 
 class DeepResearchResponse(BaseModel):
@@ -663,15 +664,16 @@ async def research_deep(request: DeepResearchRequest):
     from lutum.researcher.search import _execute_all_searches_async, _close_google_session
     from lutum.scrapers.camoufox_scraper import scrape_urls_batch
 
-    # OpenRouter Config - aus Request übernehmen
+    # LLM Config - aus Request übernehmen
     MODEL_FAST = request.work_model
     MODEL_FINAL = request.final_model
+    BASE_URL = request.base_url
 
     def call_llm(system_prompt: str, user_prompt: str, model: str = MODEL_FAST, timeout: int = 60, max_tokens: int = 8000) -> Optional[str]:
-        """Ruft OpenRouter LLM auf."""
+        """Ruft LLM auf (OpenRouter, OpenAI, Anthropic, Google, HuggingFace)."""
         try:
             response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                BASE_URL,
                 headers={
                     "Authorization": f"Bearer {get_api_key()}",
                     "Content-Type": "application/json",
@@ -1403,10 +1405,11 @@ async def get_latest_synthesis():
 class ResumeRequest(BaseModel):
     """Request für Session Resume."""
     session_id: str = Field(..., description="Session ID zum Fortsetzen", max_length=50)
-    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    api_key: str = Field(..., description="API Key", max_length=200)
     work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", max_length=100)
     final_model: str = Field("qwen/qwen3-vl-235b-a22b-instruct", max_length=100)
     language: str = Field("de", description="Language for status messages (de/en)")
+    base_url: str = Field("https://openrouter.ai/api/v1/chat/completions", description="API Base URL")
 
 
 @router.post("/research/resume")
@@ -1447,7 +1450,8 @@ async def resume_session(request: ResumeRequest):
         session_id=request.session_id,
         api_key=request.api_key,
         work_model=request.work_model,
-        final_model=request.final_model
+        final_model=request.final_model,
+        base_url=request.base_url
     )
 
     # Deep Research starten (gibt StreamingResponse zurück)
@@ -1460,10 +1464,11 @@ class AcademicResearchRequest(BaseModel):
     """Request für Academic Deep Research Pipeline."""
     context_state: dict = Field(..., description="Context State mit academic_bereiche")
     session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
-    api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    api_key: str = Field(..., description="API Key", max_length=200)
     work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="Modell für Vorarbeit", max_length=100)
     final_model: str = Field("anthropic/claude-sonnet-4.5", description="Modell für Meta-Synthesis", max_length=100)
     language: str = Field("de", description="Language for status messages (de/en)")
+    base_url: str = Field("https://openrouter.ai/api/v1/chat/completions", description="API Base URL")
 
 
 @router.post("/research/academic")
@@ -1516,12 +1521,13 @@ async def research_academic(request: AcademicResearchRequest):
 
     MODEL_FAST = request.work_model
     MODEL_META = request.final_model
+    BASE_URL = request.base_url
 
     def call_llm(system_prompt: str, user_prompt: str, model: str = MODEL_FAST, timeout: int = 60, max_tokens: int = 8000) -> Optional[str]:
-        """Ruft OpenRouter LLM auf."""
+        """Ruft LLM auf (OpenRouter, OpenAI, Anthropic, Google, HuggingFace)."""
         try:
             response = http_requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                BASE_URL,
                 headers={
                     "Authorization": f"Bearer {get_api_key()}",
                     "Content-Type": "application/json",
