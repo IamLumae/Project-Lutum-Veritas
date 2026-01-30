@@ -200,4 +200,4 @@ if __name__ == "__main__":
     print(f"\nSuccess: {result['success_count']}/{len(test_urls)}")
 
     if result["error"]:
-        print(f"Error: {result['error']}")
+        logger.error("Error: %s", result["error"])

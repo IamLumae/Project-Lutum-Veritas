@@ -7,17 +7,14 @@ URLs scrapen → Content + User Query an LLM → Rückfragen (wenn nötig)
 """
 
 import asyncio
-import requests
-from typing import Optional
+from typing import Optional, Tuple
 
 from lutum.core.log_config import get_logger
-from lutum.core.api_config import get_api_key
+from lutum.core.api_config import get_work_model
+from lutum.core.llm_client import call_chat_completion
 from lutum.scrapers.camoufox_scraper import scrape_urls_batch
 
 logger = get_logger(__name__)
-
-# === CONFIG ===
-MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 
 def _format_scraped_for_llm(scraped: dict[str, str], max_chars_per_page: int = 3000) -> str:
@@ -81,7 +78,7 @@ Wenn KEINE Fragen nötig: Sage dass du direkt loslegen kannst.
 Deine Antwort:"""
 
 
-def _call_llm_clarify(user_message: str, scraped_content: str, max_tokens: int = 2000) -> Optional[str]:
+def _call_llm_clarify(user_message: str, scraped_content: str, max_tokens: int = 2000) -> Tuple[Optional[str], Optional[str]]:
     """
     LLM analysiert Scrape-Ergebnisse und stellt Rückfragen.
     """
@@ -92,39 +89,23 @@ def _call_llm_clarify(user_message: str, scraped_content: str, max_tokens: int =
         scraped_content=scraped_content
     )
 
-    try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {get_api_key()}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": max_tokens
-            },
-            timeout=60
-        )
+    result = call_chat_completion(
+        messages=[{"role": "user", "content": prompt}],
+        model=get_work_model(),
+        max_tokens=max_tokens,
+        timeout=60
+    )
 
-        result = response.json()
+    if result.error:
+        return None, result.error
 
-        if "choices" not in result:
-            logger.error(f"LLM error: {result}")
-            return None
+    if not result.content:
+        return None, "LLM response empty"
 
-        answer = result["choices"][0]["message"]["content"]
-        logger.info(f"LLM clarification: {len(answer)} chars")
-        logger.info(f"[CLARIFY] RAW LLM RESPONSE:\n{answer}")
-        return answer
-
-    except requests.Timeout:
-        logger.error("LLM timeout")
-        return None
-
-    except Exception as e:
-        logger.error(f"LLM call failed: {e}")
-        return None
+    answer = str(result.content)
+    logger.info(f"LLM clarification: {len(answer)} chars")
+    logger.info(f"[CLARIFY] RAW LLM RESPONSE:\n{answer}")
+    return answer, None
 
 
 async def get_clarification(user_message: str, urls: list[str]) -> dict:
@@ -163,14 +144,14 @@ async def get_clarification(user_message: str, urls: list[str]) -> dict:
         formatted = _format_scraped_for_llm(scraped)
 
         # LLM Rückfragen
-        clarification = _call_llm_clarify(user_message, formatted)
+        clarification, error_message = _call_llm_clarify(user_message, formatted)
 
         if not clarification:
             return {
                 "clarification": None,
                 "scraped_content": scraped,
                 "success_count": success_count,
-                "error": "LLM call failed"
+                "error": error_message or "LLM call failed"
             }
 
         logger.info(f"Clarification complete: {success_count} pages scraped")

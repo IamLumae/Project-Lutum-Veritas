@@ -28,6 +28,20 @@ if FROZEN and sys.stdout is None:
     sys.stdout = open(os.devnull, 'w')
     sys.stderr = open(os.devnull, 'w')
 
+# Pfad-Setup: unterschiedlich für frozen vs development
+if FROZEN:
+    # PyInstaller: _MEIPASS enthält entpackte Daten
+    BASE_PATH = Path(sys._MEIPASS)
+    sys.path.insert(0, str(BASE_PATH))
+else:
+    # Development: Parent-Ordner für lutum
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from lutum.core.log_config import get_logger, setup_logging
+
+setup_logging()
+logger = get_logger(__name__)
+
 
 # === ZOMBIE KILLER ===
 def kill_zombie_on_port(port: int = 8420):
@@ -39,7 +53,7 @@ def kill_zombie_on_port(port: int = 8420):
             if result != 0:
                 return  # Port frei, alles gut
 
-        print(f"[WARN] Port {port} belegt - suche Zombie...")
+        logger.warning("Port %s belegt - suche Zombie...", port)
 
         # Windows: netstat + taskkill
         if sys.platform == 'win32':
@@ -53,12 +67,12 @@ def kill_zombie_on_port(port: int = 8420):
                     parts = line.split()
                     pid = parts[-1]
                     if pid.isdigit():
-                        print(f"[INFO] Killing zombie PID {pid} on port {port}...")
+                        logger.info("Killing zombie PID %s on port %s...", pid, port)
                         subprocess.run(
                             ['powershell', '-Command', f'Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue'],
                             capture_output=True
                         )
-                        print(f"[OK] Zombie killed!")
+                        logger.info("Zombie killed!")
                         return
         else:
             # Linux/Mac: lsof + kill
@@ -68,12 +82,12 @@ def kill_zombie_on_port(port: int = 8420):
             )
             if result.stdout.strip():
                 pid = result.stdout.strip()
-                print(f"[INFO] Killing zombie PID {pid} on port {port}...")
+                logger.info("Killing zombie PID %s on port %s...", pid, port)
                 subprocess.run(['kill', '-9', pid])
-                print(f"[OK] Zombie killed!")
+                logger.info("Zombie killed!")
 
     except Exception as e:
-        print(f"[WARN] Zombie killer failed: {e}")
+        logger.warning("Zombie killer failed: %s", e)
 
 
 # Beim Import ausführen
@@ -95,7 +109,7 @@ if not FROZEN:
         requirements_file = Path(__file__).parent / "requirements.txt"
 
         if not requirements_file.exists():
-            print("[WARN] requirements.txt nicht gefunden!")
+            logger.warning("requirements.txt nicht gefunden!")
             return
 
         # Lese required packages
@@ -116,55 +130,43 @@ if not FROZEN:
                 missing.append(full_spec)
 
         if missing:
-            print(f"[INFO] Installiere {len(missing)} fehlende Dependencies...")
+            logger.info("Installiere %s fehlende Dependencies...", len(missing))
             for pkg in missing:
-                print(f"  → {pkg}")
+                logger.info("  → %s", pkg)
 
             try:
                 subprocess.check_call([
                     sys.executable, "-m", "pip", "install",
                     "-q", "--user", *missing
                 ])
-                print("[OK] Dependencies installiert!")
+                logger.info("Dependencies installiert!")
 
                 if any("camoufox" in m for m in missing):
-                    print("[INFO] Lade Camoufox Browser herunter...")
+                    logger.info("Lade Camoufox Browser herunter...")
                     subprocess.check_call([sys.executable, "-m", "camoufox", "fetch"])
-                    print("[OK] Camoufox Browser ready!")
+                    logger.info("Camoufox Browser ready!")
 
-                print("[INFO] Dependencies installiert - bitte Backend neu starten!")
-                print("[INFO] Drücke Enter und starte dann erneut.")
+                logger.info("Dependencies installiert - bitte Backend neu starten!")
+                logger.info("Drücke Enter und starte dann erneut.")
                 input()
                 sys.exit(0)
 
             except subprocess.CalledProcessError as e:
-                print(f"[ERROR] pip install failed: {e}")
-                print("[WARN] Bitte manuell ausführen: pip install -r requirements.txt")
+                logger.error("pip install failed: %s", e)
+                logger.warning("Bitte manuell ausführen: pip install -r requirements.txt")
 
     ensure_dependencies()
 else:
-    print("[INFO] Running as frozen executable - skipping dependency check")
+    logger.info("Running as frozen executable - skipping dependency check")
 
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# Pfad-Setup: unterschiedlich für frozen vs development
-if FROZEN:
-    # PyInstaller: _MEIPASS enthält entpackte Daten
-    BASE_PATH = Path(sys._MEIPASS)
-    sys.path.insert(0, str(BASE_PATH))
-else:
-    # Development: Parent-Ordner für lutum
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from lutum.core.log_config import get_logger
 from routes.chat import router as chat_router
 from routes.health import router as health_router
 from routes.research import router as research_router
-
-logger = get_logger(__name__)
 
 
 @asynccontextmanager

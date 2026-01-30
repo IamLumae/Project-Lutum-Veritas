@@ -9,16 +9,13 @@ Output: Mindestens 5 Recherche-Punkte.
 """
 
 import re
-import requests
-from typing import Optional
+from typing import Optional, Tuple
 from lutum.core.log_config import get_logger
-from lutum.core.api_config import get_api_key
+from lutum.core.api_config import get_work_model
+from lutum.core.llm_client import call_chat_completion
 from lutum.researcher.context_state import ContextState
 
 logger = get_logger(__name__)
-
-# OpenRouter Config
-MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 
 PLAN_SYSTEM_PROMPT = """Du bist ein Research-Experte, der tiefe, reproduzierbare Recherche-Pläne erstellt.
@@ -93,45 +90,30 @@ Projekt | Issue/PR | Status | Feature | Link | Notes
 (3) ...usw."""
 
 
-def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> Optional[str]:
+def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> Tuple[Optional[str], Optional[str]]:
     """
     Ruft LLM via OpenRouter auf.
     """
-    try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {get_api_key()}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "max_tokens": max_tokens,
-                "temperature": 0.7,
-            },
-            timeout=60
-        )
+    result = call_chat_completion(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        model=get_work_model(),
+        max_tokens=max_tokens,
+        timeout=60
+    )
 
-        result = response.json()
+    if result.error:
+        logger.error(f"LLM error: {result.error}")
+        return None, result.error
 
-        if "choices" not in result:
-            logger.error(f"LLM error: {result}")
-            return None
+    if not result.content:
+        return None, "LLM response empty"
 
-        answer = result["choices"][0]["message"]["content"]
-        logger.info(f"[PLAN] RAW LLM RESPONSE:\n{answer[:2000]}...")
-        return answer
-
-    except requests.Timeout:
-        logger.error("LLM timeout")
-        return None
-    except Exception as e:
-        logger.error(f"LLM call failed: {e}")
-        return None
+    answer = str(result.content)
+    logger.info(f"[PLAN] RAW LLM RESPONSE:\n{answer[:2000]}...")
+    return answer, None
 
 
 def create_research_plan(context: ContextState) -> dict:
@@ -163,10 +145,10 @@ Nutze das vorgegebene Format mit Ziel/Suchstrings/Filter/Output/Validierung pro 
         logger.debug(f"Plan prompt length: {len(user_prompt)} chars")
 
         # LLM aufrufen via OpenRouter
-        raw_response = _call_llm(PLAN_SYSTEM_PROMPT, user_prompt)
+        raw_response, error_message = _call_llm(PLAN_SYSTEM_PROMPT, user_prompt)
 
         if not raw_response:
-            return {"error": "LLM call failed", "plan_points": []}
+            return {"error": error_message or "LLM call failed", "plan_points": []}
 
         logger.debug(f"Plan response: {raw_response[:200]}...")
 
@@ -217,10 +199,10 @@ Mindestens 5 Punkte, nummeriert mit (1), (2), etc.
 Nutze das vorgegebene Format mit Ziel/Suchstrings/Filter/Output/Validierung pro Punkt."""
 
         # LLM aufrufen via OpenRouter
-        raw_response = _call_llm(PLAN_SYSTEM_PROMPT, user_prompt)
+        raw_response, error_message = _call_llm(PLAN_SYSTEM_PROMPT, user_prompt)
 
         if not raw_response:
-            return {"error": "LLM call failed", "plan_points": []}
+            return {"error": error_message or "LLM call failed", "plan_points": []}
 
         # Plan-Punkte parsen
         plan_points = _parse_plan_points(raw_response)
@@ -302,8 +284,8 @@ if __name__ == "__main__":
 
     result = create_research_plan(ctx)
 
-    if result.get("error"):
-        print(f"Error: {result['error']}")
+        if result.get("error"):
+            logger.error("Error: %s", result["error"])
     else:
         print(f"\nGenerated Plan ({len(result['plan_points'])} points):")
         print(result["plan_text"])
