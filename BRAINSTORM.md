@@ -244,8 +244,7 @@ Project Lutum Veritas/
 │   │       └── sessions.ts      # point_summary Message Type
 │   └── src-tauri/
 ├── dist/
-│   ├── lutum-backend.exe        # Backend (PyInstaller)
-│   └── LutumVeritas-Frontend-Setup.exe  # Installer v1.1.0
+│   └── Lutum Veritas_1.2.1_x64-setup.exe  # Unified Installer (Backend bundled)
 ├── BRAINSTORM.md                # Diese Datei
 ├── RECURSIVE_PIPELINE.md        # Detaillierte Pipeline-Doku
 └── CODE_LAWS.md
@@ -255,9 +254,9 @@ Project Lutum Veritas/
 
 ## TODO
 
-- [ ] Modus-Auswahl UI (Standard vs. Akademisch)
-- [ ] Export-Funktionen (PDF, Markdown Download)
-- [ ] Akademischer Modus (rekursive Tiefe pro Punkt)
+- [x] ~~Modus-Auswahl UI (Standard vs. Akademisch)~~ ✓ Implementiert
+- [x] ~~Export-Funktionen (PDF, Markdown Download)~~ ✓ Implementiert
+- [x] ~~Akademischer Modus (rekursive Tiefe pro Punkt)~~ ✓ Implementiert
 - [ ] Progress-Persistence (Recherche nach Browser-Restart fortsetzen)
 - [ ] Raw HTML Scrape Option
 - [ ] Screenshot Scrape für visuelle Analyse
@@ -265,4 +264,4 @@ Project Lutum Veritas/
 ---
 
 *Erstellt: 2026-01-26*
-*Letztes Update: 2026-01-27 - DDG Search, 10 Queries/Punkt, 20 URLs/Pick, 5-Kategorien Diversifizierung*
+*Letztes Update: 2026-01-30 - Academic Mode, PDF Export, Unified Installer*

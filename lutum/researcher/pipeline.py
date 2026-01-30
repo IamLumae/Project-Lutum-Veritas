@@ -1,20 +1,17 @@
 """
-Pipeline Orchestrator
-=====================
-Lädt und führt Steps dynamisch aus (sync + async).
+Pipeline Orchestrator (Setup-Phase)
+===================================
+Lädt und führt Steps 1-3 dynamisch aus (sync + async).
 
 Architektur:
-- Jeder Step ist EINE Datei mit EINER Hauptfunktion
-- Pipeline lädt Steps und kettet sie zusammen
-- Fertige Steps werden NIE wieder angefasst
-- Unterstützt sync UND async Step-Funktionen
+- Steps 1-3: Setup-Phase (Overview, Search, Clarify)
+- Nach Step 3: User beantwortet Rückfragen, reviewed Plan
+- Deep Research Loop: Wird direkt in research.py orchestriert (nicht hier)
 
 Steps:
 - step_01_overview.py → get_overview_queries()
 - step_02_search.py → get_initial_data() [async]
-- step_03_scrape.py → scrape_urls()
-- step_04_analyze.py → (TODO)
-- ...
+- step_03_clarify.py → get_clarification()
 """
 
 import asyncio
@@ -51,7 +48,7 @@ STEPS = {
         "input_keys": ["user_message", "urls_picked"],
         "output_key": "clarification",
     },
-    # 4: Deep Research nach User-Antwort
+    # Deep Research: Wird in research.py orchestriert (nicht hier)
 }
 
 

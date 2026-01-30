@@ -361,12 +361,12 @@ Verhindert leere Dossiers bei schwierigen Recherche-Punkten.
 ## Nächste Schritte (TODO)
 
 - [x] ~~Retry-Loop bei Sackgassen~~ ✓ Implementiert
-- [ ] Modus-Auswahl UI (Standard vs. Akademisch)
-- [ ] Export-Funktionen (PDF, Markdown)
-- [ ] Akademischer Modus (rekursive Tiefe pro Punkt)
+- [x] ~~Modus-Auswahl UI (Standard vs. Akademisch)~~ ✓ Implementiert
+- [x] ~~Export-Funktionen (PDF, Markdown)~~ ✓ Implementiert
+- [x] ~~Akademischer Modus (rekursive Tiefe pro Punkt)~~ ✓ Implementiert
 - [ ] Progress-Persistence (Recherche nach Browser-Restart fortsetzen)
 
 ---
 
 *Erstellt: 2026-01-27*
-*Letztes Update: 2026-01-27 - DDG Search, 10 diversifizierte Queries, 20 diversifizierte URLs/Pick*
+*Letztes Update: 2026-01-30 - Academic Mode, PDF Export, Unified Installer*
