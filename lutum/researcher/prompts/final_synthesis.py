@@ -1,361 +1,353 @@
 """
 Final Synthesis Prompt
 ======================
-Erstellt das finale Gesamtdokument aus allen einzelnen Dossiers.
+Creates the final overall document from all individual dossiers.
 
-EINMALIG am Ende: Bekommt alle Punkt-Dossiers und synthetisiert sie
-zu einem ultra-detaillierten finalen Dokument.
+ONCE at the end: Receives all point dossiers and synthesizes them
+into an ultra-detailed final document.
 
-MODELL: anthropic/claude-sonnet-4.5
-(Premium-Modell für höchste Qualität bei Final Synthesis)
+MODEL: anthropic/claude-sonnet-4.5
+(Premium model for highest quality in Final Synthesis)
 
 FORMAT v2.0:
-- Universelle Marker für Parser (## EMOJI TITEL)
-- Konsolidiertes Citation-System [N]
-- PFLICHT vs OPTIONAL Sektionen (generisch für JEDE Recherche)
+- Universal markers for parser (## EMOJI TITLE)
+- Consolidated citation system [N]
+- MANDATORY vs OPTIONAL sections (generic for ANY research)
 """
 
-# Model für Final Synthesis (größeres Modell für alle Dossiers)
+# Model for Final Synthesis (larger model for all dossiers)
 FINAL_SYNTHESIS_MODEL = "anthropic/claude-sonnet-4.5"
 
-# WICHTIG: Hoher Timeout! Final Synthesis kann 15-20 Minuten dauern bei großen Dokumenten
-FINAL_SYNTHESIS_TIMEOUT = 1200  # 20 Minuten in Sekunden
+# IMPORTANT: High timeout! Final Synthesis can take 15-20 minutes for large documents
+FINAL_SYNTHESIS_TIMEOUT = 1200  # 20 minutes in seconds
 
-FINAL_SYNTHESIS_SYSTEM_PROMPT = """Du bist ein Meister der wissenschaftlichen Synthese und Dokumentation.
-
-═══════════════════════════════════════════════════════════════════
-                    SPRACHE (KRITISCH!)
-═══════════════════════════════════════════════════════════════════
-
-WICHTIG: Antworte IMMER in der Sprache der ursprünglichen Nutzer-Anfrage!
-- Deutsche Anfrage → Deutscher Report
-- English query → English report
-- Mischung → Sprache des Hauptteils der Anfrage
+FINAL_SYNTHESIS_SYSTEM_PROMPT = """You are a master of scientific synthesis and documentation.
 
 ═══════════════════════════════════════════════════════════════════
-                    CITATION-SYSTEM (PFLICHT!)
+                    CITATION SYSTEM (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-JEDE faktische Aussage MUSS mit einer Citation markiert werden:
-- Format: Text mit Aussage[1] und weitere Aussage[2]
-- Übernimm Citations aus den Dossiers
-- Konsolidiere zu einem globalen Quellenverzeichnis am Ende
-- Nummeriere neu durch: [1], [2], [3]... (fortlaufend im gesamten Dokument)
+EVERY factual statement MUST be marked with a citation:
+- Format: Text with statement[1] and another statement[2]
+- Take over citations from the dossiers
+- Consolidate into a global source list at the end
+- Renumber sequentially: [1], [2], [3]... (continuous throughout the document)
 
-BEISPIEL:
-"RAG erreicht 95% Accuracy bei strukturierten Benchmarks"[1], während
-traditionelle Methoden bei etwa 70% stagnieren[2]. Neuere Ansätze
-kombinieren beide Techniken für optimale Ergebnisse[3][4].
+EXAMPLE:
+"RAG achieves 95% accuracy on structured benchmarks"[1], while
+traditional methods stagnate at around 70%[2]. Newer approaches
+combine both techniques for optimal results[3][4].
 
 ═══════════════════════════════════════════════════════════════════
-                    FORMAT-MARKER (PFLICHT!)
+                    FORMAT MARKERS (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-Diese Marker ermöglichen automatisches Parsing - EXAKT so verwenden:
+These markers enable automatic parsing - use EXACTLY like this:
 
-SEKTIONEN:      ## EMOJI TITEL
-                Beispiel: ## 📊 EXECUTIVE SUMMARY
+SECTIONS:       ## EMOJI TITLE
+                Example: ## 📊 EXECUTIVE SUMMARY
 
-SUB-SEKTIONEN:  ### Untertitel
-                Beispiel: ### Das Wichtigste in Kürze
+SUB-SECTIONS:   ### Subtitle
+                Example: ### Key Takeaways
 
-TABELLEN:       | Col1 | Col2 | Col3 |
+TABLES:         | Col1 | Col2 | Col3 |
                 |------|------|------|
                 | data | data | data |
 
-LISTEN:         1) Erster Punkt
-                2) Zweiter Punkt
-                (NICHT 1. oder - für nummerierte Listen!)
+LISTS:          1) First point
+                2) Second point
+                (NOT 1. or - for numbered lists!)
 
-HIGHLIGHT-BOX:  > 💡 **Wichtig:** Text hier
-                > ⚠️ **Warnung:** Text hier
+HIGHLIGHT BOX:  > 💡 **Important:** Text here
+                > ⚠️ **Warning:** Text here
 
-KEY-VALUE:      - **Schlüssel:** Wert
-
-═══════════════════════════════════════════════════════════════════
-                         WAS SYNTHESE BEDEUTET
-═══════════════════════════════════════════════════════════════════
-
-Synthese ist NICHT:
-- Einfaches Zusammenkopieren der Dossiers
-- Aneinanderreihen von Abschnitten
-- Wiederholung derselben Informationen
-
-Synthese IST:
-- Neue Erkenntnisse aus der KOMBINATION der Informationen ziehen
-- QUERVERBINDUNGEN zwischen den Themen herstellen
-- MUSTER erkennen die in Einzeldossiers nicht sichtbar sind
-- Ein NARRATIV schaffen das alles verbindet
-- WIDERSPRÜCHE auflösen oder transparent machen
+KEY-VALUE:      - **Key:** Value
 
 ═══════════════════════════════════════════════════════════════════
-                         HARTREGELN (PFLICHT)
+                         WHAT SYNTHESIS MEANS
 ═══════════════════════════════════════════════════════════════════
 
-1. **KEINE REDUNDANZ**: Identische Inhalte aus Dossiers nur einmal, dann referenzieren.
+Synthesis is NOT:
+- Simply copying dossiers together
+- Stringing sections together
+- Repeating the same information
 
-2. **KEINE UNBEGRÜNDETEN SUPERLATIVE**: Claims nur wenn im Dossier-Evidence belegt.
-
-3. **TEXT-ONLY**: Keine API-Metadaten erfinden. Nur was in den Dossiers steht.
-
-4. **ABSCHLUSSMARKER PFLICHT**: Am Ende IMMER "=== END REPORT ===" ausgeben.
-
-5. **CITATIONS PFLICHT**: Jede faktische Aussage braucht [N] Referenz.
+Synthesis IS:
+- Drawing NEW insights from the COMBINATION of information
+- Establishing CROSS-CONNECTIONS between topics
+- Recognizing PATTERNS not visible in individual dossiers
+- Creating a NARRATIVE that connects everything
+- Resolving CONTRADICTIONS or making them transparent
 
 ═══════════════════════════════════════════════════════════════════
-                         KATEGORIEN-LOGIK
+                         HARD RULES (MANDATORY)
 ═══════════════════════════════════════════════════════════════════
 
-PFLICHT-Sektionen: Diese MÜSSEN in JEDEM Report vorkommen!
-OPTIONAL-Sektionen: NUR wenn für dieses Thema wirklich relevant!
+1. **NO REDUNDANCY**: Identical content from dossiers only once, then reference.
 
-Bei Unsicherheit: WEGLASSEN ist besser als mit Fülltext aufblähen.
+2. **NO UNFOUNDED SUPERLATIVES**: Claims only when supported by dossier evidence.
 
-Beispiel - "Geschichte des Römischen Reichs":
-- Handlungsempfehlungen → WEGLASSEN (nicht actionable)
-- Maturity Matrix → WEGLASSEN (keine Tech-Vergleiche)
-- Claim Ledger → WEGLASSEN (keine quantitativen Claims)
+3. **TEXT-ONLY**: Do not invent API metadata. Only what's in the dossiers.
 
-Beispiel - "RAG-Optimierung für Enterprise":
-- Handlungsempfehlungen → EINSCHLIESSEN (sehr actionable)
-- Maturity Matrix → EINSCHLIESSEN (Tech-Vergleich sinnvoll)
-- Claim Ledger → EINSCHLIESSEN (Performance-Claims prüfen)
-"""
+4. **END MARKER MANDATORY**: At the end ALWAYS output "=== END REPORT ===".
+
+5. **CITATIONS MANDATORY**: Every factual statement needs [N] reference.
+
+═══════════════════════════════════════════════════════════════════
+                         CATEGORY LOGIC
+═══════════════════════════════════════════════════════════════════
+
+MANDATORY sections: Must appear in EVERY report!
+OPTIONAL sections: ONLY if truly relevant for this topic!
+
+When uncertain: OMIT is better than padding with filler.
+
+Example - "History of the Roman Empire":
+- Action recommendations → OMIT (not actionable)
+- Maturity Matrix → OMIT (no tech comparisons)
+- Claim Ledger → OMIT (no quantitative claims)
+
+Example - "RAG Optimization for Enterprise":
+- Action recommendations → INCLUDE (very actionable)
+- Maturity Matrix → INCLUDE (tech comparison makes sense)
+- Claim Ledger → INCLUDE (performance claims to verify)
+
+CRITICAL - LANGUAGE: Always respond in the same language as the user's original query shown below."""
 
 FINAL_SYNTHESIS_USER_PROMPT = """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                           SYNTHESE-AUFTRAG                                    ║
+║                           SYNTHESIS TASK                                      ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-URSPRÜNGLICHE AUFGABE:
+ORIGINAL TASK:
 {user_query}
 
-ABGEARBEITETER RECHERCHE-PLAN:
+COMPLETED RESEARCH PLAN:
 {research_plan}
 
 ════════════════════════════════════════════════════════════════════════════════
-                              EINZELNE DOSSIERS
+                              INDIVIDUAL DOSSIERS
 ════════════════════════════════════════════════════════════════════════════════
 
 {all_dossiers}
 
 ════════════════════════════════════════════════════════════════════════════════
-                         AUSGABE-STRUKTUR
+                         OUTPUT STRUCTURE
 ════════════════════════════════════════════════════════════════════════════════
 
-Erstelle das finale Dokument mit diesen Sektionen.
-PFLICHT = Immer ausgeben | OPTIONAL = Nur wenn relevant!
+Create the final document with these sections.
+MANDATORY = Always output | OPTIONAL = Only if relevant!
 
 ---
 
-# [TITEL]
+# [TITLE]
 
-Ein prägnanter Titel der die gesamte Recherche beschreibt.
+A concise title describing the entire research.
 
 ---
 
 ## 📊 EXECUTIVE SUMMARY
-(PFLICHT)
+(MANDATORY)
 
-### Das Wichtigste in Kürze
+### Key Takeaways
 
-Die absoluten Kernerkenntnisse (5-7 Punkte):
+The absolute core findings (5-7 points):
 
-1) Erste Kernerkenntnis mit Quellenbeleg[1]
-2) Zweite Kernerkenntnis[2]
-3) Dritte Kernerkenntnis[3][4]
+1) First key finding with source reference[1]
+2) Second key finding[2]
+3) Third key finding[3][4]
 4) ...
 
-> 💡 **Die zentrale Erkenntnis:** Ein Satz der alles zusammenfasst.
+> 💡 **The central insight:** One sentence that summarizes everything.
 
-### Für wen ist das relevant?
+### Who is this relevant for?
 
-- **Zielgruppe 1:** Warum relevant
-- **Zielgruppe 2:** Warum relevant
-- **Zielgruppe 3:** Warum relevant
+- **Target audience 1:** Why relevant
+- **Target audience 2:** Why relevant
+- **Target audience 3:** Why relevant
 
 ---
 
-## 🔬 METHODIK
-(PFLICHT)
+## 🔬 METHODOLOGY
+(MANDATORY)
 
-### Quellenarten
+### Source Types
 
-| Typ | Anzahl | Beispiele |
-|-----|--------|-----------|
+| Type | Count | Examples |
+|------|-------|----------|
 | GitHub Repos | X | repo1, repo2 |
 | Papers/ArXiv | X | paper1, paper2 |
 | Community (Reddit/HN) | X | thread1, thread2 |
-| Dokumentation | X | docs1, docs2 |
+| Documentation | X | docs1, docs2 |
 
-### Filter & Constraints
+### Filters & Constraints
 
-- **Zeitraum:** z.B. 2023-2025
-- **Plattformen:** z.B. GitHub, ArXiv, Reddit
-- **Sprachen:** z.B. Englisch, Deutsch
-- **Kriterien:** z.B. >100 Stars, Peer-reviewed
+- **Time period:** e.g. 2023-2025
+- **Platforms:** e.g. GitHub, ArXiv, Reddit
+- **Languages:** e.g. English, German
+- **Criteria:** e.g. >100 stars, peer-reviewed
 
-### Systematische Lücken
+### Systematic Gaps
 
-> ⚠️ **Diese Bereiche wurden NICHT abgedeckt:**
-- Lücke 1 (warum)
-- Lücke 2 (warum)
-- Lücke 3 (warum)
+> ⚠️ **These areas were NOT covered:**
+- Gap 1 (why)
+- Gap 2 (why)
+- Gap 3 (why)
 
 ---
 
-## 📚 THEMENKAPITEL
-(PFLICHT)
+## 📚 TOPIC CHAPTERS
+(MANDATORY)
 
-Strukturiere nach THEMEN, nicht nach Dossiers!
-So viele Kapitel wie thematisch sinnvoll.
+Structure by TOPICS, not by dossiers!
+As many chapters as thematically sensible.
 
-### Kapitel 1: [Themenbereich]
+### Chapter 1: [Topic Area]
 
-**Kernerkenntnisse:**
-1) Erkenntnis mit Citation[5]
-2) Erkenntnis mit Citation[6]
+**Key Findings:**
+1) Finding with citation[5]
+2) Finding with citation[6]
 3) ...
 
 **Details:**
-- **Aspekt 1:** Beschreibung[7]
-- **Aspekt 2:** Beschreibung[8]
+- **Aspect 1:** Description[7]
+- **Aspect 2:** Description[8]
 
 **Trade-offs:**
 - **Pro:** ...
 - **Contra:** ...
 
-> 💡 **Takeaway:** Zusammenfassung dieses Kapitels in einem Satz.
+> 💡 **Takeaway:** Summary of this chapter in one sentence.
 
-### Kapitel 2: [Themenbereich]
+### Chapter 2: [Topic Area]
 
-[Gleiche Struktur wie Kapitel 1]
+[Same structure as Chapter 1]
 
-### Kapitel N: [Themenbereich]
+### Chapter N: [Topic Area]
 
-[So viele Kapitel wie nötig]
-
----
-
-## 🔗 SYNTHESE
-(PFLICHT)
-
-### Querverbindungen
-
-Wie hängen die Themen zusammen?
-
-- **Verbindung 1:** Thema A und Thema B hängen zusammen weil...[9]
-- **Verbindung 2:** ...[10]
-
-### Widersprüche & Spannungen
-
-Wo widersprechen sich Quellen?
-
-1) **Widerspruch:** Quelle A sagt X[11], Quelle B sagt Y[12]
-   - **Auflösung:** ...
-
-2) **Spannung:** ...
-
-### Übergreifende Muster
-
-> 💡 **Was wird erst in der Zusammenschau sichtbar:**
-- Muster 1
-- Muster 2
-- Muster 3
-
-### Neue Erkenntnisse
-
-Was ergibt sich erst aus der Kombination der Dossiers?
-
-1) Neue Erkenntnis 1
-2) Neue Erkenntnis 2
+[As many chapters as needed]
 
 ---
 
-## ⚖️ KRITISCHE WÜRDIGUNG
-(PFLICHT)
+## 🔗 SYNTHESIS
+(MANDATORY)
 
-### Was wissen wir sicher?
+### Cross-Connections
 
-Gut belegte Erkenntnisse mit starker Evidenz:
+How are the topics connected?
 
-1) Sichere Erkenntnis 1[13][14]
-2) Sichere Erkenntnis 2[15]
+- **Connection 1:** Topic A and Topic B are connected because...[9]
+- **Connection 2:** ...[10]
+
+### Contradictions & Tensions
+
+Where do sources contradict each other?
+
+1) **Contradiction:** Source A says X[11], Source B says Y[12]
+   - **Resolution:** ...
+
+2) **Tension:** ...
+
+### Overarching Patterns
+
+> 💡 **What only becomes visible in the overall view:**
+- Pattern 1
+- Pattern 2
+- Pattern 3
+
+### New Insights
+
+What emerges only from combining the dossiers?
+
+1) New insight 1
+2) New insight 2
+
+---
+
+## ⚖️ CRITICAL ASSESSMENT
+(MANDATORY)
+
+### What do we know for certain?
+
+Well-supported findings with strong evidence:
+
+1) Certain finding 1[13][14]
+2) Certain finding 2[15]
 3) ...
 
-### Was bleibt unsicher?
+### What remains uncertain?
 
-Offene Fragen, dünne Evidenz, widersprüchliche Quellen:
+Open questions, thin evidence, contradictory sources:
 
-1) Unsichere Frage 1
-2) Unsichere Frage 2
+1) Uncertain question 1
+2) Uncertain question 2
 3) ...
 
-### Limitationen dieser Recherche
+### Limitations of this Research
 
-> ⚠️ **Explizite Grenzen:**
-- Limitation 1 (z.B. nur englische Quellen)
-- Limitation 2 (z.B. kein Zugang zu Paywalled Papers)
-- Limitation 3 (z.B. Zeitraum begrenzt)
+> ⚠️ **Explicit limitations:**
+- Limitation 1 (e.g. English sources only)
+- Limitation 2 (e.g. no access to paywalled papers)
+- Limitation 3 (e.g. time period limited)
 
 ---
 
-## 🎯 HANDLUNGSEMPFEHLUNGEN
-(OPTIONAL - NUR wenn actionable Empfehlungen sinnvoll sind!)
+## 🎯 ACTION RECOMMENDATIONS
+(OPTIONAL - ONLY if actionable recommendations make sense!)
 
-### Sofort umsetzbar (Quick Wins)
+### Immediately actionable (Quick Wins)
 
-| Aktion | Aufwand | Erwartung |
-|--------|---------|-----------|
-| Aktion 1 | Gering | Ergebnis 1 |
-| Aktion 2 | Gering | Ergebnis 2 |
+| Action | Effort | Expected Outcome |
+|--------|--------|------------------|
+| Action 1 | Low | Result 1 |
+| Action 2 | Low | Result 2 |
 
-### Mittelfristig (2-6 Wochen)
+### Medium-term (2-6 weeks)
 
-1) Empfehlung 1
-2) Empfehlung 2
+1) Recommendation 1
+2) Recommendation 2
 
-### Strategisch (Langfristig)
+### Strategic (Long-term)
 
-1) Strategische Empfehlung 1
-2) Strategische Empfehlung 2
+1) Strategic recommendation 1
+2) Strategic recommendation 2
 
 ---
 
 ## 📊 MATURITY MATRIX
-(OPTIONAL - NUR bei Tech-Vergleichen oder Produkt-Evaluierungen!)
+(OPTIONAL - ONLY for tech comparisons or product evaluations!)
 
-| Technik/Ansatz | Reifegrad | Setup | Operations | Nutzen | Empfehlung |
-|----------------|-----------|-------|------------|--------|------------|
-| Technik 1 | Production | Low | Low | High | Quick Win |
-| Technik 2 | Beta | Medium | Medium | Medium-High | Test |
-| Technik 3 | Research | High | High | Varies | Beobachten |
+| Tech/Approach | Maturity | Setup | Operations | Benefit | Recommendation |
+|---------------|----------|-------|------------|---------|----------------|
+| Tech 1 | Production | Low | Low | High | Quick Win |
+| Tech 2 | Beta | Medium | Medium | Medium-High | Test |
+| Tech 3 | Research | High | High | Varies | Monitor |
 
 ---
 
-## 📋 TOP QUELLEN
-(OPTIONAL - NUR wenn besonders wertvolle Quellen hervorgehoben werden sollen!)
+## 📋 TOP SOURCES
+(OPTIONAL - ONLY if particularly valuable sources should be highlighted!)
 
-Die wichtigsten Quellen aus der Recherche:
+The most important sources from the research:
 
-| # | Quelle | Typ | Warum wertvoll |
-|---|--------|-----|----------------|
-| [1] | Name | Repo/Paper/Thread | Kurzbeschreibung |
+| # | Source | Type | Why valuable |
+|---|--------|------|--------------|
+| [1] | Name | Repo/Paper/Thread | Short description |
 | [2] | Name | ... | ... |
 
 ---
 
-## 📎 QUELLENVERZEICHNIS
-(PFLICHT)
+## 📎 SOURCE LIST
+(MANDATORY)
 
-Konsolidiertes Verzeichnis aller zitierten Quellen:
+Consolidated list of all cited sources:
 
 === SOURCES ===
-[1] URL_1 - Titel/Beschreibung
-[2] URL_2 - Titel/Beschreibung
-[3] URL_3 - Titel/Beschreibung
-[4] URL_4 - Titel/Beschreibung
-[5] URL_5 - Titel/Beschreibung
+[1] URL_1 - Title/Description
+[2] URL_2 - Title/Description
+[3] URL_3 - Title/Description
+[4] URL_4 - Title/Description
+[5] URL_5 - Title/Description
 ...
 === END SOURCES ===
 
@@ -371,26 +363,26 @@ def build_final_synthesis_prompt(
     all_dossiers: list[dict]
 ) -> tuple[str, str]:
     """
-    Baut den Final-Synthesis-Prompt.
+    Builds the Final Synthesis prompt.
 
     Args:
-        user_query: Ursprüngliche Aufgabe
-        research_plan: Liste der Recherche-Punkte
-        all_dossiers: Liste von {point: str, dossier: str, sources: list, citations: dict}
+        user_query: Original task
+        research_plan: List of research points
+        all_dossiers: List of {point: str, dossier: str, sources: list, citations: dict}
 
     Returns:
         Tuple (system_prompt, user_prompt)
     """
-    # Research Plan formatieren
+    # Format research plan
     plan_lines = []
     for i, point in enumerate(research_plan, 1):
         plan_lines.append(f"{i}. {point}")
     plan_text = "\n".join(plan_lines)
 
-    # Dossiers formatieren
+    # Format dossiers
     dossier_parts = []
     for i, d in enumerate(all_dossiers, 1):
-        point_title = d.get('point', f'Punkt {i}')
+        point_title = d.get('point', f'Point {i}')
         dossier_content = d.get('dossier', '')
 
         dossier_parts.append(f"""
@@ -414,14 +406,14 @@ def build_final_synthesis_prompt(
 
 def parse_final_synthesis_response(response: str) -> tuple[str, dict]:
     """
-    Parst die Final-Synthesis-Response und extrahiert Citations.
+    Parses the Final Synthesis response and extracts citations.
 
     Args:
-        response: Volle LLM Response
+        response: Full LLM Response
 
     Returns:
         Tuple (report_text, citations)
-        - report_text: Der vollständige Report
+        - report_text: The complete report
         - citations: Dict {1: "url - title", 2: "url - title", ...}
     """
     import re
@@ -429,7 +421,7 @@ def parse_final_synthesis_response(response: str) -> tuple[str, dict]:
     report_text = response
     citations = {}
 
-    # Sources Block extrahieren
+    # Extract Sources block
     sources_match = re.search(
         r'=== SOURCES ===\n(.+?)\n=== END SOURCES ===',
         response, re.DOTALL

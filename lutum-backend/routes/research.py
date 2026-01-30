@@ -688,8 +688,18 @@ async def research_deep(request: DeepResearchRequest):
             )
             result = response.json()
             if "choices" in result:
-                return result["choices"][0]["message"]["content"]
-            logger.error(f"LLM error: {result}")
+                choice = result["choices"][0]
+                message = choice.get("message", {})
+                content = message.get("content")
+                finish_reason = choice.get("finish_reason", "unknown")
+
+                # Debug: Log wenn content fehlt oder leer ist
+                if content is None:
+                    logger.warning(f"LLM returned null content (finish_reason={finish_reason}, refusal={message.get('refusal', 'none')}, model={model})")
+                elif not content.strip():
+                    logger.warning(f"LLM returned empty string (finish_reason={finish_reason}, model={model})")
+                return content
+            logger.error(f"LLM error (no choices): {result}")
             return None
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
@@ -1528,8 +1538,18 @@ async def research_academic(request: AcademicResearchRequest):
             )
             result = response.json()
             if "choices" in result:
-                return result["choices"][0]["message"]["content"]
-            logger.error(f"LLM error: {result}")
+                choice = result["choices"][0]
+                message = choice.get("message", {})
+                content = message.get("content")
+                finish_reason = choice.get("finish_reason", "unknown")
+
+                # Debug: Log wenn content fehlt oder leer ist
+                if content is None:
+                    logger.warning(f"LLM returned null content (finish_reason={finish_reason}, refusal={message.get('refusal', 'none')}, model={model})")
+                elif not content.strip():
+                    logger.warning(f"LLM returned empty string (finish_reason={finish_reason}, model={model})")
+                return content
+            logger.error(f"LLM error (no choices): {result}")
             return None
         except Exception as e:
             logger.error(f"LLM call failed: {e}")

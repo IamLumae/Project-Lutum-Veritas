@@ -3,119 +3,120 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Academic Conclusion Prompt - DER MAGISCHE FINALE CALL
-=====================================================
-Hier passiert die Magie. Hier treffen hunderte Quellen und
-zehntausende Zeichen Wissen auf: "JETZT finde die Lösung."
+Academic Conclusion Prompt - THE MAGIC FINAL CALL
+=================================================
+This is where the magic happens. This is where hundreds of sources and
+tens of thousands of characters of knowledge meet: "NOW find the solution."
 
-Dieser Call bekommt:
-1. Die originale User-Frage (EXAKT)
-2. Alle Bereichs-Synthesen (bereits komprimiert, fokussiert)
+This call receives:
+1. The original user question (EXACT)
+2. All area syntheses (already compressed, focused)
 
-Seine Aufgabe:
-- Querverbindungen zwischen Bereichen finden
-- Widersprüche identifizieren
-- Übergreifende Muster erkennen
-- NEUE Erkenntnisse die nur durch Kombination sichtbar werden
-- Die ANTWORT auf die ursprüngliche Frage
+Its task:
+- Find cross-connections between areas
+- Identify contradictions
+- Recognize overarching patterns
+- NEW insights only visible through combination
+- The ANSWER to the original question
 """
 
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Das BESTE Model für den finalen Call
+# The BEST model for the final call
 ACADEMIC_CONCLUSION_MODEL = "qwen/qwen3-vl-235b-a22b-instruct"
-ACADEMIC_CONCLUSION_TIMEOUT = 300  # 5 Minuten - das ist der wichtigste Call
+ACADEMIC_CONCLUSION_TIMEOUT = 300  # 5 minutes - this is the most important call
 
 
-ACADEMIC_CONCLUSION_SYSTEM_PROMPT = """Du bist ein brillanter interdisziplinärer Forscher.
+ACADEMIC_CONCLUSION_SYSTEM_PROMPT = """You are a brilliant interdisciplinary researcher.
 
-Du erhältst:
-1. Eine komplexe Forschungsfrage
-2. Mehrere UNABHÄNGIG recherchierte Bereichs-Synthesen
+You receive:
+1. A complex research question
+2. Multiple INDEPENDENTLY researched area syntheses
 
-Diese Bereiche wurden ABSICHTLICH isoliert voneinander erforscht.
-Jetzt ist DEIN Moment: Du siehst als ERSTER das Gesamtbild.
+These areas were INTENTIONALLY researched in isolation from each other.
+Now is YOUR moment: You see the complete picture FIRST.
 
 ═══════════════════════════════════════════════════════════════════
-                        DEINE MISSION
+                        YOUR MISSION
 ═══════════════════════════════════════════════════════════════════
 
-1. QUERVERBINDUNGEN FINDEN
-   - Welche Konzepte aus Bereich A erklären Phänomene in Bereich B?
-   - Wo gibt es unerwartete Parallelen?
-   - Welche Brücken existieren zwischen den Disziplinen?
+1. FIND CROSS-CONNECTIONS
+   - Which concepts from Area A explain phenomena in Area B?
+   - Where are there unexpected parallels?
+   - What bridges exist between disciplines?
 
-2. WIDERSPRÜCHE IDENTIFIZIEREN
-   - Wo widersprechen sich die Bereiche?
-   - Sind diese Widersprüche auflösbar oder fundamental?
-   - Was bedeuten sie für die Gesamtfrage?
+2. IDENTIFY CONTRADICTIONS
+   - Where do the areas contradict each other?
+   - Are these contradictions resolvable or fundamental?
+   - What do they mean for the overall question?
 
-3. ÜBERGREIFENDE MUSTER ERKENNEN
-   - Welche Muster tauchen in mehreren Bereichen auf?
-   - Was sagt uns das über das zugrundeliegende Problem?
+3. RECOGNIZE OVERARCHING PATTERNS
+   - Which patterns appear in multiple areas?
+   - What does this tell us about the underlying problem?
 
-4. NEUE ERKENNTNISSE SYNTHETISIEREN
-   - Was wird ERST JETZT sichtbar, da alle Bereiche zusammenkommen?
-   - Welche Schlussfolgerungen kann NIEMAND ziehen der nur einen Bereich kennt?
+4. SYNTHESIZE NEW INSIGHTS
+   - What only becomes visible NOW that all areas come together?
+   - What conclusions can NOBODY draw who only knows one area?
 
-5. DIE ANTWORT FORMULIEREN
-   - Beantworte die ursprüngliche Frage so gut es die Evidenz erlaubt
-   - Sei ehrlich über Unsicherheiten
-   - Benenne was wir WISSEN vs. was wir VERMUTEN
+5. FORMULATE THE ANSWER
+   - Answer the original question as well as the evidence allows
+   - Be honest about uncertainties
+   - Name what we KNOW vs. what we ASSUME
 
 ═══════════════════════════════════════════════════════════════════
                         OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════
 
-## 🔗 QUERVERBINDUNGEN
+## 🔗 CROSS-CONNECTIONS
 
-### Verbindung 1: [Titel]
-[Beschreibung wie Bereich X und Y zusammenhängen]
+### Connection 1: [Title]
+[Description of how Area X and Y relate]
 
-### Verbindung 2: [Titel]
+### Connection 2: [Title]
 ...
 
-## ⚡ WIDERSPRÜCHE & SPANNUNGEN
+## ⚡ CONTRADICTIONS & TENSIONS
 
-### Widerspruch 1: [Titel]
-- **Bereich A sagt:** ...
-- **Bereich B sagt:** ...
-- **Auflösung/Bedeutung:** ...
+### Contradiction 1: [Title]
+- **Area A says:** ...
+- **Area B says:** ...
+- **Resolution/Meaning:** ...
 
-## 🔄 ÜBERGREIFENDE MUSTER
+## 🔄 OVERARCHING PATTERNS
 
-1) Muster das in mehreren Bereichen auftaucht
+1) Pattern appearing in multiple areas
 2) ...
 
-## 💡 NEUE ERKENNTNISSE
+## 💡 NEW INSIGHTS
 
-> Diese Erkenntnisse sind NUR durch die Kombination der Bereiche möglich:
+> These insights are ONLY possible through combining the areas:
 
-1) Erste Meta-Erkenntnis
-2) Zweite Meta-Erkenntnis
+1) First meta-insight
+2) Second meta-insight
 ...
 
-## 🎯 ANTWORT AUF DIE FORSCHUNGSFRAGE
+## 🎯 ANSWER TO THE RESEARCH QUESTION
 
-### Was wir wissen (hohe Konfidenz):
+### What we know (high confidence):
 - ...
 
-### Was wir vermuten (moderate Konfidenz):
+### What we assume (moderate confidence):
 - ...
 
-### Was offen bleibt:
+### What remains open:
 - ...
 
-### Fazit
-[Die beste Antwort die die Evidenz hergibt - ehrlich, nuanciert, aber klar]
+### Conclusion
+[The best answer the evidence allows - honest, nuanced, but clear]
 
 ═══════════════════════════════════════════════════════════════════
 
-SPRACHE: Antworte in der Sprache der ursprünglichen Frage!
-DENKE TIEF: Das ist der wichtigste Teil der gesamten Recherche.
-SEI MUTIG: Ziehe Schlüsse die andere nicht sehen würden."""
+THINK DEEP: This is the most important part of the entire research.
+BE BOLD: Draw conclusions others wouldn't see.
+
+CRITICAL - LANGUAGE: Always respond in the same language as the user's original query shown below."""
 
 
 def build_academic_conclusion_prompt(
@@ -123,67 +124,67 @@ def build_academic_conclusion_prompt(
     bereichs_synthesen: list[dict],
 ) -> tuple[str, str]:
     """
-    Baut den FINALEN Prompt - der magische Call.
+    Builds the FINAL prompt - the magic call.
 
     Args:
-        user_query: Die ORIGINALE User-Frage (exakt!)
-        bereichs_synthesen: Liste von {bereich_titel, synthese, sources_count}
+        user_query: The ORIGINAL user question (exact!)
+        bereichs_synthesen: List of {bereich_titel, synthese, sources_count}
 
     Returns:
         (system_prompt, user_prompt)
     """
 
-    # Alle Synthesen formatieren
+    # Format all syntheses
     synthesen_text = ""
     total_sources = 0
 
     for i, s in enumerate(bereichs_synthesen, 1):
         total_sources += s.get('sources_count', 0)
         synthesen_text += f"\n{'═'*70}\n"
-        synthesen_text += f"BEREICH {i}: {s['bereich_titel']}\n"
-        synthesen_text += f"Quellen in diesem Bereich: {s.get('sources_count', 'N/A')}\n"
+        synthesen_text += f"AREA {i}: {s['bereich_titel']}\n"
+        synthesen_text += f"Sources in this area: {s.get('sources_count', 'N/A')}\n"
         synthesen_text += f"{'═'*70}\n\n"
         synthesen_text += s['synthese']
         synthesen_text += "\n"
 
     user_prompt = f"""
 ╔══════════════════════════════════════════════════════════════════════╗
-║                    URSPRÜNGLICHE FORSCHUNGSFRAGE                     ║
+║                    ORIGINAL RESEARCH QUESTION                         ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
 "{user_query}"
 
 ╔══════════════════════════════════════════════════════════════════════╗
-║                        RECHERCHE-ÜBERSICHT                           ║
+║                        RESEARCH OVERVIEW                              ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
-Anzahl unabhängiger Bereiche: {len(bereichs_synthesen)}
-Gesamtzahl analysierter Quellen: {total_sources}
+Number of independent areas: {len(bereichs_synthesen)}
+Total number of analyzed sources: {total_sources}
 
-Die folgenden Bereiche wurden UNABHÄNGIG voneinander recherchiert.
-Jeder Bereich hatte eigene Suchstrategien, eigene Quellen, eigene Analyse.
-Du siehst sie jetzt zum ERSTEN MAL zusammen.
+The following areas were researched INDEPENDENTLY of each other.
+Each area had its own search strategies, own sources, own analysis.
+You see them together for the FIRST TIME now.
 
 ╔══════════════════════════════════════════════════════════════════════╗
-║                      BEREICHS-SYNTHESEN                              ║
+║                      AREA SYNTHESES                                   ║
 ╚══════════════════════════════════════════════════════════════════════╝
 {synthesen_text}
 
 ╔══════════════════════════════════════════════════════════════════════╗
-║                         DEINE AUFGABE                                ║
+║                         YOUR TASK                                     ║
 ╚══════════════════════════════════════════════════════════════════════╝
 
-Du hast jetzt Zugang zu {len(bereichs_synthesen)} unabhängigen Forschungsperspektiven
-basierend auf {total_sources} analysierten Quellen.
+You now have access to {len(bereichs_synthesen)} independent research perspectives
+based on {total_sources} analyzed sources.
 
-FINDE:
-1. Querverbindungen zwischen den Bereichen
-2. Widersprüche und Spannungen
-3. Übergreifende Muster
-4. Neue Erkenntnisse die NUR durch Kombination sichtbar werden
-5. Die beste mögliche ANTWORT auf die Forschungsfrage
+FIND:
+1. Cross-connections between areas
+2. Contradictions and tensions
+3. Overarching patterns
+4. New insights that are ONLY visible through combination
+5. The best possible ANSWER to the research question
 
-Das ist dein Moment. Denke tief. Sei brillant."""
+This is your moment. Think deep. Be brilliant."""
 
     logger.info(f"Academic Conclusion prompt: {len(user_prompt)} chars, {len(bereichs_synthesen)} areas, {total_sources} sources")
 

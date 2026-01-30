@@ -3,58 +3,59 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Bereichs-Synthese Prompt
-========================
-Jeder Bereich bekommt seinen EIGENEN LLM Call.
-Fokussiert, komprimiert, keine Ablenkung durch andere Bereiche.
+Area Synthesis Prompt
+=====================
+Each area gets its OWN LLM call.
+Focused, compressed, no distraction from other areas.
 """
 
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Model für Bereichs-Synthese (FINAL = qwen 235b wie Conclusion)
+# Model for Area Synthesis (FINAL = qwen 235b like Conclusion)
 BEREICHS_SYNTHESIS_MODEL = "qwen/qwen3-vl-235b-a22b-instruct"
-BEREICHS_SYNTHESIS_TIMEOUT = 180  # 3 Minuten pro Bereich (großes Modell)
+BEREICHS_SYNTHESIS_TIMEOUT = 180  # 3 minutes per area (large model)
 
 
-BEREICHS_SYNTHESIS_SYSTEM_PROMPT = """Du bist ein akademischer Forschungsassistent.
+BEREICHS_SYNTHESIS_SYSTEM_PROMPT = """You are an academic research assistant.
 
-Deine Aufgabe: Synthetisiere die Dossiers EINES Forschungsbereichs zu einem kohärenten,
-fokussierten Bericht. Dieser Bereich wurde UNABHÄNGIG von anderen Bereichen recherchiert.
+Your task: Synthesize the dossiers of ONE research area into a coherent,
+focused report. This area was researched INDEPENDENTLY from other areas.
 
-WICHTIG:
-- Fokussiere dich NUR auf diesen Bereich
-- Extrahiere die KERNERKENNTNISSE
-- Identifiziere Muster INNERHALB dieses Bereichs
-- Bewerte die Evidenzqualität
-- Benenne offene Fragen DIESES Bereichs
+IMPORTANT:
+- Focus ONLY on this area
+- Extract the CORE FINDINGS
+- Identify patterns WITHIN this area
+- Evaluate evidence quality
+- Name open questions of THIS area
 
 FORMAT:
-## [Bereichs-Titel]
+## [Area Title]
 
-### Kernerkenntnisse
-1) Erste zentrale Erkenntnis[1]
-2) Zweite zentrale Erkenntnis[2]
+### Core Findings
+1) First central finding[1]
+2) Second central finding[2]
 ...
 
-### Detailanalyse
-[Tiefgehende Analyse der wichtigsten Aspekte]
+### Detailed Analysis
+[In-depth analysis of the most important aspects]
 
-### Evidenzbewertung
-- **Stark belegt:** ...
-- **Moderat belegt:** ...
-- **Schwach/Spekulativ:** ...
+### Evidence Evaluation
+- **Strongly supported:** ...
+- **Moderately supported:** ...
+- **Weak/Speculative:** ...
 
-### Offene Fragen
-- Frage 1
-- Frage 2
+### Open Questions
+- Question 1
+- Question 2
 
-### Bereichs-Fazit
-[2-3 Sätze die diesen Bereich zusammenfassen]
+### Area Conclusion
+[2-3 sentences summarizing this area]
 
-SPRACHE: Antworte in der Sprache der User-Anfrage!
-CITATIONS: Behalte alle [N] Referenzen bei!"""
+CITATIONS: Keep all [N] references!
+
+CRITICAL - LANGUAGE: Always respond in the same language as the user's original query shown below."""
 
 
 def build_bereichs_synthesis_prompt(
@@ -63,42 +64,42 @@ def build_bereichs_synthesis_prompt(
     bereich_dossiers: list[dict],
 ) -> tuple[str, str]:
     """
-    Baut den Prompt für die Synthese EINES Bereichs.
+    Builds the prompt for synthesizing ONE area.
 
     Args:
-        user_query: Originale User-Frage
-        bereich_titel: Titel des Bereichs
-        bereich_dossiers: Liste von {point, dossier, sources}
+        user_query: Original user question
+        bereich_titel: Title of the area
+        bereich_dossiers: List of {point, dossier, sources}
 
     Returns:
         (system_prompt, user_prompt)
     """
 
-    # Dossiers formatieren
+    # Format dossiers
     dossiers_text = ""
     for i, d in enumerate(bereich_dossiers, 1):
         dossiers_text += f"\n{'='*60}\n"
         dossiers_text += f"DOSSIER {i}: {d['point']}\n"
         dossiers_text += f"{'='*60}\n"
         dossiers_text += d['dossier']
-        dossiers_text += f"\n\nQuellen: {len(d.get('sources', []))} URLs\n"
+        dossiers_text += f"\n\nSources: {len(d.get('sources', []))} URLs\n"
 
-    user_prompt = f"""KONTEXT:
-Ursprüngliche Forschungsfrage: "{user_query}"
+    user_prompt = f"""CONTEXT:
+Original research question: "{user_query}"
 
-BEREICH: {bereich_titel}
-Anzahl Dossiers: {len(bereich_dossiers)}
+AREA: {bereich_titel}
+Number of dossiers: {len(bereich_dossiers)}
 
 {'-'*60}
-DOSSIERS DIESES BEREICHS:
+DOSSIERS OF THIS AREA:
 {dossiers_text}
 {'-'*60}
 
-AUFGABE:
-Synthetisiere diese {len(bereich_dossiers)} Dossiers zu EINEM kohärenten Bericht
-für den Bereich "{bereich_titel}".
+TASK:
+Synthesize these {len(bereich_dossiers)} dossiers into ONE coherent report
+for the area "{bereich_titel}".
 
-Fokussiere dich ausschließlich auf diesen Bereich. Andere Bereiche werden separat behandelt."""
+Focus exclusively on this area. Other areas are handled separately."""
 
     logger.debug(f"Bereichs-Synthesis prompt for '{bereich_titel}': {len(user_prompt)} chars")
 

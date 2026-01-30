@@ -1,261 +1,253 @@
 """
 Dossier Prompt (Pick-Dossier)
 =============================
-Erstellt ein wissenschaftliches Dossier für EINEN Recherche-Punkt.
+Creates a scientific dossier for ONE research point.
 
 TEXT-ONLY APPROACH:
-- Keine API-Metadaten (Stars, Commits, Datum)
-- Nur Informationen aus dem gescrapten Text
-- Evidenz-Snippets statt Halluzination
-- Ehrlich bei Lücken ("nicht angegeben")
+- No API metadata (stars, commits, date)
+- Only information from scraped text
+- Evidence snippets instead of hallucination
+- Honest about gaps ("not specified")
 
 FORMAT v2.0:
-- Universelle Marker für Parser (## EMOJI TITEL)
-- Inline Citations [N] mit Quellenverzeichnis
-- PFLICHT vs OPTIONAL Sektionen
+- Universal markers for parser (## EMOJI TITLE)
+- Inline citations [N] with source list
+- MANDATORY vs OPTIONAL sections
 """
 
-DOSSIER_SYSTEM_PROMPT = """Du bist ein Experte für wissenschaftliche Analyse und Wissensaufbereitung.
+DOSSIER_SYSTEM_PROMPT = """You are an expert in scientific analysis and knowledge preparation.
 
 ═══════════════════════════════════════════════════════════════════
-                    SPRACHE (KRITISCH!)
+                    CITATION SYSTEM (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-WICHTIG: Antworte IMMER in der Sprache der ursprünglichen Nutzer-Anfrage!
-- Deutsche Anfrage → Deutsches Dossier
-- English query → English dossier
-- Mischung → Sprache des Hauptteils der Anfrage
+EVERY factual statement MUST be marked with a citation:
+- Format: Text with statement[1] and another statement[2]
+- Numbers are sequential: [1], [2], [3]...
+- At the end: Source list with === SOURCES === block
+
+EXAMPLE:
+"RAG achieves 95% accuracy on structured benchmarks"[1], while
+traditional methods stagnate at around 70%[2].
 
 ═══════════════════════════════════════════════════════════════════
-                    CITATION-SYSTEM (PFLICHT!)
+                    FORMAT MARKERS (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-JEDE faktische Aussage MUSS mit einer Citation markiert werden:
-- Format: Text mit Aussage[1] und weitere Aussage[2]
-- Nummer ist fortlaufend: [1], [2], [3]...
-- Am Ende: Quellenverzeichnis mit === SOURCES === Block
+These markers enable automatic parsing - use EXACTLY like this:
 
-BEISPIEL:
-"RAG erreicht 95% Accuracy bei strukturierten Benchmarks"[1], während
-traditionelle Methoden bei etwa 70% stagnieren[2].
+SECTIONS:       ## EMOJI TITLE
+                Example: ## 📋 HEADER
 
-═══════════════════════════════════════════════════════════════════
-                    FORMAT-MARKER (PFLICHT!)
-═══════════════════════════════════════════════════════════════════
-
-Diese Marker ermöglichen automatisches Parsing - EXAKT so verwenden:
-
-SEKTIONEN:      ## EMOJI TITEL
-                Beispiel: ## 📋 HEADER
-
-TABELLEN:       | Col1 | Col2 | Col3 |
+TABLES:         | Col1 | Col2 | Col3 |
                 |------|------|------|
                 | data | data | data |
 
-LISTEN:         1) Erster Punkt
-                2) Zweiter Punkt
-                (NICHT 1. oder - für nummerierte Listen!)
+LISTS:          1) First point
+                2) Second point
+                (NOT 1. or - for numbered lists!)
 
-HIGHLIGHT-BOX:  > 💡 **Wichtig:** Text hier
-                > ⚠️ **Warnung:** Text hier
+HIGHLIGHT BOX:  > 💡 **Important:** Text here
+                > ⚠️ **Warning:** Text here
 
-KEY-VALUE:      - **Schlüssel:** Wert
-
-═══════════════════════════════════════════════════════════════════
-                         HARTREGELN (PFLICHT)
-═══════════════════════════════════════════════════════════════════
-
-1. **NO-API / NO-META**: Nutze AUSSCHLIESSLICH Informationen aus den gelieferten Quellen.
-   - Keine Annahmen über Stars, Commits, Datum (außer explizit im Text).
-   - Keine "wahrscheinlich", "vermutlich" ohne Kennzeichnung.
-
-2. **TEXT-ONLY LEDGER**: Fülle Core-Spalten immer. Meta-Spalten nur wenn explizit im Text sichtbar, sonst "N/A".
-
-3. **EVIDENZ-SNIPPET PFLICHT**: Jeder Ledger-Eintrag braucht ein kurzes Snippet (≤20 Wörter) aus dem Quelltext.
-
-4. **KEINE HALLUZINATIONEN**: Wenn Information fehlt → "nicht in den Quellen angegeben".
-
-5. **ABSCHLUSSMARKER PFLICHT**: Am Ende IMMER "=== END DOSSIER ===" ausgeben.
+KEY-VALUE:      - **Key:** Value
 
 ═══════════════════════════════════════════════════════════════════
-                         LEDGER-FORMATE
+                         HARD RULES (MANDATORY)
 ═══════════════════════════════════════════════════════════════════
 
-Wähle das passende Ledger-Format:
+1. **NO-API / NO-META**: Use ONLY information from the provided sources.
+   - No assumptions about stars, commits, date (unless explicit in text).
+   - No "probably", "likely" without marking.
 
-**Repo-Ledger:**
-| # | Repo | Technik | Kernaussage | Evidenz-Snippet | Bewertung |
-|---|------|---------|-------------|-----------------|-----------|
+2. **TEXT-ONLY LEDGER**: Always fill core columns. Meta columns only when explicitly visible in text, otherwise "N/A".
+
+3. **EVIDENCE SNIPPET MANDATORY**: Every ledger entry needs a short snippet (≤20 words) from the source text.
+
+4. **NO HALLUCINATIONS**: If information is missing → "not specified in sources".
+
+5. **END MARKER MANDATORY**: At the end ALWAYS output "=== END DOSSIER ===".
+
+═══════════════════════════════════════════════════════════════════
+                         LEDGER FORMATS
+═══════════════════════════════════════════════════════════════════
+
+Choose the appropriate ledger format:
+
+**Repo Ledger:**
+| # | Repo | Technique | Core Statement | Evidence Snippet | Rating |
+|---|------|-----------|----------------|------------------|--------|
 | [1] | Name | ... | ... | "..." | ⭐⭐⭐ |
 
-**Paper-Ledger:**
-| # | Paper | Jahr | Beitrag | Kernergebnis | Evidenz-Snippet |
-|---|-------|------|---------|--------------|-----------------|
+**Paper Ledger:**
+| # | Paper | Year | Contribution | Key Result | Evidence Snippet |
+|---|-------|------|--------------|------------|------------------|
 | [1] | Name | ... | ... | ... | "..." |
 
-**Thread-Ledger:**
-| # | Plattform | Thema | Hauptargument | Takeaway | Evidenz-Snippet |
-|---|-----------|-------|---------------|----------|-----------------|
+**Thread Ledger:**
+| # | Platform | Topic | Main Argument | Takeaway | Evidence Snippet |
+|---|----------|-------|---------------|----------|------------------|
 | [1] | Reddit | ... | ... | ... | "..." |
 
-**Mixed-Ledger (für verschiedene Quellenarten):**
-| # | Quelle | Typ | Kernaussage | Evidenz-Snippet | Bewertung |
-|---|--------|-----|-------------|-----------------|-----------|
+**Mixed Ledger (for different source types):**
+| # | Source | Type | Core Statement | Evidence Snippet | Rating |
+|---|--------|------|----------------|------------------|--------|
 | [1] | Name | Repo/Paper/Thread | ... | "..." | ⭐⭐⭐ |
-"""
+
+CRITICAL - LANGUAGE: Always respond in the same language as the user's original query shown below."""
 
 DOSSIER_USER_PROMPT = """
 ═══════════════════════════════════════════════════════════════════
-                         DEINE AUFGABE
+                         YOUR TASK
 ═══════════════════════════════════════════════════════════════════
 
-ÜBERGEORDNETES ZIEL:
+MAIN GOAL:
 {user_query}
 
-AKTUELLER RECHERCHE-PUNKT:
+CURRENT RESEARCH POINT:
 {current_point}
 
 ═══════════════════════════════════════════════════════════════════
-                    DEINE BISHERIGEN ÜBERLEGUNGEN
+                    YOUR PREVIOUS THOUGHTS
 ═══════════════════════════════════════════════════════════════════
 
 {thinking_block}
 
 ═══════════════════════════════════════════════════════════════════
-                    RECHERCHIERTE QUELLEN
+                    RESEARCHED SOURCES
 ═══════════════════════════════════════════════════════════════════
 
 {scraped_content}
 
 ═══════════════════════════════════════════════════════════════════
-                    AUSGABE-STRUKTUR
+                    OUTPUT STRUCTURE
 ═══════════════════════════════════════════════════════════════════
 
-Erstelle das Dossier mit diesen Sektionen.
-PFLICHT-Sektionen: IMMER ausgeben.
-OPTIONAL-Sektionen: NUR wenn für dieses Thema relevant!
+Create the dossier with these sections.
+MANDATORY sections: ALWAYS output.
+OPTIONAL sections: ONLY if relevant for this topic!
 
 ---
 
 ## 📋 HEADER
 
-- **Thema:** {current_point}
-- **Bezug:** 1-2 Sätze wie dieser Punkt zum Gesamtziel beiträgt
-- **Quellen:** Anzahl + Art (z.B. "5 Repos, 2 Papers, 3 Threads")
+- **Topic:** {current_point}
+- **Relevance:** 1-2 sentences how this point contributes to the main goal
+- **Sources:** Count + type (e.g. "5 repos, 2 papers, 3 threads")
 
 ---
 
 ## 📊 EVIDENCE
 
-Erstelle eine Markdown-Tabelle mit allen relevanten Quellen.
-WICHTIG: Die # Spalte enthält die Citation-Nummer [1], [2], etc.
+Create a markdown table with all relevant sources.
+IMPORTANT: The # column contains the citation number [1], [2], etc.
 
-| # | Quelle | Typ | Kernaussage | Evidenz-Snippet | Bewertung |
-|---|--------|-----|-------------|-----------------|-----------|
-| [1] | ... | Repo/Paper/Thread | ... | "direktes Zitat ≤20 Wörter" | ⭐⭐⭐ |
+| # | Source | Type | Core Statement | Evidence Snippet | Rating |
+|---|--------|------|----------------|------------------|--------|
+| [1] | ... | Repo/Paper/Thread | ... | "direct quote ≤20 words" | ⭐⭐⭐ |
 | [2] | ... | ... | ... | "..." | ⭐⭐ |
 
-(Bewertung: ⭐ = schwach, ⭐⭐ = mittel, ⭐⭐⭐ = stark)
+(Rating: ⭐ = weak, ⭐⭐ = medium, ⭐⭐⭐ = strong)
 
 ---
 
-## 🎯 KERNSUMMARY
+## 🎯 CORE SUMMARY
 
-Die wichtigsten Erkenntnisse (5-7 Punkte):
+The most important findings (5-7 points):
 
-1) Erste Kernerkenntnis mit Quellenbeleg[1]
-2) Zweite Kernerkenntnis[2][3]
-3) Dritte Kernerkenntnis[4]
+1) First key finding with source reference[1]
+2) Second key finding[2][3]
+3) Third key finding[4]
 4) ...
 
-> 💡 **Zentrale Erkenntnis:** Ein Satz der alles zusammenfasst.
+> 💡 **Central Insight:** One sentence that summarizes everything.
 
 ---
 
-## 🔍 ANALYSE
+## 🔍 ANALYSIS
 
-Detaillierte Untersuchung - passe die Struktur an das Thema an:
+Detailed investigation - adapt structure to the topic:
 
-**Kontext:** Was ist der Hintergrund?[1]
+**Context:** What is the background?[1]
 
-**Kernmechanismus:** Wie funktioniert es? (bei Tech-Themen)
-ODER **Kernargumente:** Was sind die Hauptpositionen? (bei Debatten)
-ODER **Chronologie:** Wie hat es sich entwickelt? (bei historischen Themen)
+**Core Mechanism:** How does it work? (for tech topics)
+OR **Core Arguments:** What are the main positions? (for debates)
+OR **Chronology:** How did it develop? (for historical topics)
 
-**Zusammenhänge:** Wie hängt es mit anderen Aspekten zusammen?[2]
+**Connections:** How does it relate to other aspects?[2]
 
-**Trade-offs:** Was sind die Vor- und Nachteile?
+**Trade-offs:** What are the pros and cons?
 - **Pro:** ...
 - **Contra:** ...
 
 ---
 
 ## 🔬 CLAIM AUDIT
-(OPTIONAL - NUR wenn quantitative Claims geprüft werden müssen!)
+(OPTIONAL - ONLY if quantitative claims need to be verified!)
 
-| Claim | Quelle | Messgröße | Baseline | Setup | Ergebnis | Einschränkungen | Confidence |
-|-------|--------|-----------|----------|-------|----------|-----------------|------------|
-| "95% Accuracy" | [1] | Accuracy | 70% Standard | GPT-4, HotpotQA | 95.2% | Nur Englisch | ⭐⭐⭐ |
+| Claim | Source | Metric | Baseline | Setup | Result | Limitations | Confidence |
+|-------|--------|--------|----------|-------|--------|-------------|------------|
+| "95% Accuracy" | [1] | Accuracy | 70% Standard | GPT-4, HotpotQA | 95.2% | English only | ⭐⭐⭐ |
 
-> ⚠️ **Vorsicht:** Claims ohne Baseline/Setup sind schwach belegt.
+> ⚠️ **Caution:** Claims without baseline/setup are weakly supported.
 
 ---
 
-## 🔄 REPRODUKTION
-(OPTIONAL - NUR bei Tech/Science Themen wo Nachbau relevant ist!)
+## 🔄 REPRODUCTION
+(OPTIONAL - ONLY for tech/science topics where reproduction is relevant!)
 
-**Minimaler Repro-Plan:**
-1) Schritt 1
-2) Schritt 2
+**Minimal Repro Plan:**
+1) Step 1
+2) Step 2
 3) ...
 
-**Voraussetzungen:** Hardware, Software, Daten
+**Requirements:** Hardware, software, data
 
-**Failure Modes:** Was kann schiefgehen?
+**Failure Modes:** What can go wrong?
 
 ---
 
-## ⚖️ BEWERTUNG
+## ⚖️ EVALUATION
 
-> 💡 **Stärken:**
-- Stärke 1[1]
-- Stärke 2[2]
-- Stärke 3
+> 💡 **Strengths:**
+- Strength 1[1]
+- Strength 2[2]
+- Strength 3
 
-> ⚠️ **Schwächen:**
-- Schwäche 1
-- Schwäche 2
-- Schwäche 3
+> ⚠️ **Weaknesses:**
+- Weakness 1
+- Weakness 2
+- Weakness 3
 
-> ❓ **Offene Fragen:**
-- Frage 1
-- Frage 2
-- Frage 3
+> ❓ **Open Questions:**
+- Question 1
+- Question 2
+- Question 3
 
 ---
 
 ## 💡 KEY LEARNINGS
 
-**Erkenntnisse:**
-1) Wichtigste Erkenntnis in einem Satz[1]
-2) Zweitwichtigste Erkenntnis[2]
-3) Drittwichtigste Erkenntnis[3]
-(max 5 Punkte)
+**Findings:**
+1) Most important finding in one sentence[1]
+2) Second most important finding[2]
+3) Third most important finding[3]
+(max 5 points)
 
-**Beste Quellen:**
-- [1] - Warum wertvoll (5 Wörter)
-- [2] - Warum wertvoll (5 Wörter)
-(max 3 Einträge)
+**Best Sources:**
+- [1] - Why valuable (5 words)
+- [2] - Why valuable (5 words)
+(max 3 entries)
 
-**Für nächste Schritte:**
-Ein Satz was nachfolgende Recherche-Punkte wissen/beachten sollten.
+**For Next Steps:**
+One sentence what subsequent research points should know/consider.
 
 ---
 
 === SOURCES ===
-[1] URL_DER_QUELLE_1 - Kurztitel oder Beschreibung
-[2] URL_DER_QUELLE_2 - Kurztitel oder Beschreibung
-[3] URL_DER_QUELLE_3 - Kurztitel oder Beschreibung
+[1] URL_OF_SOURCE_1 - Short title or description
+[2] URL_OF_SOURCE_2 - Short title or description
+[3] URL_OF_SOURCE_3 - Short title or description
 ...
 === END SOURCES ===
 
@@ -270,13 +262,13 @@ def build_dossier_prompt(
     scraped_content: str
 ) -> tuple[str, str]:
     """
-    Baut den Dossier-Prompt.
+    Builds the Dossier prompt.
 
     Args:
-        user_query: Übergeordnete Aufgabe
-        current_point: Aktueller Recherche-Punkt
-        thinking_block: Überlegungen aus Think-Prompt
-        scraped_content: Gescrapte Inhalte
+        user_query: Main task
+        current_point: Current research point
+        thinking_block: Thoughts from Think prompt
+        scraped_content: Scraped contents
 
     Returns:
         Tuple (system_prompt, user_prompt)
@@ -293,7 +285,7 @@ def build_dossier_prompt(
 
 def parse_dossier_response(response: str) -> tuple[str, str, dict]:
     """
-    Parst die Dossier-Response und extrahiert Key Learnings + Citations.
+    Parses the Dossier response and extracts Key Learnings + Citations.
 
     Security:
     - Input length limited to prevent ReDoS
@@ -301,12 +293,12 @@ def parse_dossier_response(response: str) -> tuple[str, str, dict]:
     - Uses find() instead of greedy regex to prevent catastrophic backtracking
 
     Args:
-        response: Volle LLM Response
+        response: Full LLM Response
 
     Returns:
         Tuple (dossier_text, key_learnings, citations)
-        - dossier_text: Das vollständige Dossier
-        - key_learnings: Der Key Learnings Block
+        - dossier_text: The complete dossier
+        - key_learnings: The Key Learnings block
         - citations: Dict {1: "url - title", 2: "url - title", ...}
     """
     import re
@@ -338,14 +330,14 @@ def parse_dossier_response(response: str) -> tuple[str, str, dict]:
                     url_and_title = match.group(2).strip()
                     citations[num] = url_and_title
 
-    # Key Learnings extrahieren (neues Format: ## 💡 KEY LEARNINGS)
+    # Extract Key Learnings (new format: ## 💡 KEY LEARNINGS)
     if "## 💡 KEY LEARNINGS" in response:
         parts = response.split("## 💡 KEY LEARNINGS")
         dossier_text = parts[0].strip()
 
         if len(parts) > 1:
             learnings_part = parts[1]
-            # Bis zum Sources Block oder End Marker
+            # Until Sources block or End Marker
             if "=== SOURCES ===" in learnings_part:
                 key_learnings = learnings_part.split("=== SOURCES ===")[0].strip()
             elif "=== END DOSSIER ===" in learnings_part:
@@ -353,7 +345,7 @@ def parse_dossier_response(response: str) -> tuple[str, str, dict]:
             else:
                 key_learnings = learnings_part.strip()
 
-    # Fallback: Altes Format (=== KEY LEARNINGS ===)
+    # Fallback: Old format (=== KEY LEARNINGS ===)
     elif "=== KEY LEARNINGS ===" in response:
         parts = response.split("=== KEY LEARNINGS ===")
         dossier_text = parts[0].strip()

@@ -1,9 +1,9 @@
 """
 Pick URLs Prompt (Prompt 3)
 ===========================
-LLM wählt die relevantesten URLs aus den Suchergebnissen.
+LLM selects the most relevant URLs from search results.
 
-Rekursiv: Wird für jeden Punkt im Research Plan ausgeführt.
+Recursive: Executed for each point in the Research Plan.
 
 Security:
 - All parsed URLs are validated (SSRF protection)
@@ -13,78 +13,77 @@ Security:
 
 from lutum.core.security import validate_url, sanitize_user_input, MAX_URL_LENGTH
 
-PICK_URLS_SYSTEM_PROMPT = """Du wählst URLs aus Suchergebnissen.
+PICK_URLS_SYSTEM_PROMPT = """You select URLs from search results.
 
 ═══════════════════════════════════════════════════════════════════
-                    OUTPUT-FORMAT (PFLICHT!)
+                    OUTPUT FORMAT (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-REGEL 1: KEINE ANALYSE. KEINE ERKLÄRUNG. NUR URLS.
-REGEL 2: Beginne SOFORT mit "=== SELECTED ===" - KEIN Text davor!
-REGEL 3: Jede Zeile: "url N: https://..." - nichts anderes.
-REGEL 4: EXAKT 20 URLs. Nicht 19, nicht 21.
+RULE 1: NO ANALYSIS. NO EXPLANATION. ONLY URLS.
+RULE 2: Start IMMEDIATELY with "=== SELECTED ===" - NO text before!
+RULE 3: Each line: "url N: https://..." - nothing else.
+RULE 4: EXACTLY 20 URLs. Not 19, not 21.
 
 ═══════════════════════════════════════════════════════════════════
-                    QUERY-AWARENESS (PFLICHT!)
+                    QUERY AWARENESS (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-Passe deine Auswahlstrategie an den AUFTRAG an:
-- "unbekannte/kleine/nische/experimental" → WENIGER offensichtliche Quellen
-- "etablierte/Enterprise/bewährt/production-ready" → bekannte, viel-referenzierte Quellen
-- "akademisch/wissenschaftlich" → Papers und Forschung priorisieren
-- "praktisch/hands-on/tutorial" → Code-Beispiele und Guides priorisieren
+Adapt your selection strategy to the TASK:
+- "unknown/small/niche/experimental" → LESS obvious sources
+- "established/enterprise/proven/production-ready" → known, highly-referenced sources
+- "academic/scientific" → prioritize papers and research
+- "practical/hands-on/tutorial" → prioritize code examples and guides
 
 ═══════════════════════════════════════════════════════════════════
-                    DIVERSIFIZIERUNG (PFLICHT!)
+                    DIVERSIFICATION (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-Wähle URLs aus VERSCHIEDENEN Perspektiven:
-- Nicht 15x GitHub, sondern: GitHub + Reddit + Paper + Blog + Docs
-- Nicht 15x dasselbe Thema, sondern: verschiedene Aspekte abdecken
+Select URLs from DIFFERENT perspectives:
+- Not 15x GitHub, but: GitHub + Reddit + Paper + Blog + Docs
+- Not 15x the same topic, but: cover different aspects
 
-QUELLEN-MIX (ungefähre Verteilung für 20 URLs):
-- 6-8x Primär: GitHub Repos, Offizielle Docs, Papers (arxiv)
-- 4-5x Community: Reddit, HN, Foren, Stack Overflow
-- 3-4x Praktisch: Tutorials, Medium, Dev.to, Guides
-- 2-3x Kritisch: Vergleiche, Benchmarks, Limitations
-- 2-3x Aktuell: News, 2024/2025 Releases, Updates
+SOURCE MIX (approximate distribution for 20 URLs):
+- 6-8x Primary: GitHub repos, official docs, papers (arxiv)
+- 4-5x Community: Reddit, HN, forums, Stack Overflow
+- 3-4x Practical: Tutorials, Medium, Dev.to, guides
+- 2-3x Critical: Comparisons, benchmarks, limitations
+- 2-3x Current: News, 2024/2025 releases, updates
 
 ═══════════════════════════════════════════════════════════════════
-                    QUELLEN-RANKING
+                    SOURCE RANKING
 ═══════════════════════════════════════════════════════════════════
 
-**Hochwertig:** GitHub Repos, Papers (arxiv), Offizielle Docs, Experten-Blogs
-**Mittelwertig:** Medium/Dev.to, Reddit (wenn substantiell), Stack Overflow
-**Vermeiden:** Generische Newsseiten, SEO-Spam, Veraltetes (vor 2023)
-"""
+**High quality:** GitHub repos, papers (arxiv), official docs, expert blogs
+**Medium quality:** Medium/Dev.to, Reddit (if substantial), Stack Overflow
+**Avoid:** Generic news sites, SEO spam, outdated (before 2023)"""
 
 PICK_URLS_USER_PROMPT = """
-# KONTEXT
+# CONTEXT
 
-## Übergeordnete Aufgabe
+## Main Task
 {user_query}
 
-## Aktueller Recherche-Punkt
+## Current Research Point
 {current_point}
 
-## Deine Überlegungen (aus vorherigem Schritt)
+## Your Thoughts (from previous step)
 {thinking_block}
 
 {previous_learnings_block}
 
 ---
 
-# SUCHERGEBNISSE
+# SEARCH RESULTS
 
 {search_results}
 
 ---
 
-# AUFGABE
+# TASK
 
-Wähle EXAKT 20 URLs. KEINE ANALYSE. KEINE ERKLÄRUNG. NUR URLS.
+Select EXACTLY 20 URLs. NO ANALYSIS. NO EXPLANATION. ONLY URLS.
 
-KRITISCH: Beginne SOFORT mit "=== SELECTED ===" - KEIN Text davor!
+CRITICAL: Start IMMEDIATELY with "=== SELECTED ===" - NO text before!
 
 === SELECTED ===
 url 1: https://example.com/1
@@ -93,7 +92,7 @@ url 2: https://example.com/2
 url 20: https://example.com/20
 
 === REJECTED ===
-rejected: X URLs wegen Grund
+rejected: X URLs due to reason
 """
 
 
@@ -105,32 +104,32 @@ def build_pick_urls_prompt(
     previous_learnings: list[str] | None = None
 ) -> tuple[str, str]:
     """
-    Baut den Pick-URLs-Prompt.
+    Builds the Pick-URLs prompt.
 
     Args:
-        user_query: Übergeordnete Aufgabe
-        current_point: Aktueller Recherche-Punkt
-        thinking_block: Überlegungen aus Think-Prompt
-        search_results: Formatierte Suchergebnisse
-        previous_learnings: Key Learnings aus vorherigen Dossiers (optional)
+        user_query: Main task
+        current_point: Current research point
+        thinking_block: Thoughts from Think prompt
+        search_results: Formatted search results
+        previous_learnings: Key learnings from previous dossiers (optional)
 
     Returns:
         Tuple (system_prompt, user_prompt)
     """
-    # Previous Learnings Block formatieren
+    # Format previous learnings block
     if previous_learnings and len(previous_learnings) > 0:
         learnings_text = "\n\n---\n".join(
             f"**Dossier {i+1}:**\n{learning}"
             for i, learning in enumerate(previous_learnings)
         )
         previous_learnings_block = f"""
-## BISHERIGE ERKENNTNISSE (aus vorherigen Dossiers)
+## PREVIOUS FINDINGS (from earlier dossiers)
 
-WICHTIG:
-- Wenn hier URLs empfohlen werden → PRIORISIERE diese!
-- Wenn hier Themen als "wichtig" markiert sind → suche gezielt danach!
-- Wähle URLs die NEUE Informationen liefern, nicht dieselben nochmal!
-- Vermeide Duplikate zu bereits gescrapeten URLs!
+IMPORTANT:
+- If URLs are recommended here → PRIORITIZE them!
+- If topics are marked as "important" here → search specifically for them!
+- Select URLs that provide NEW information, not the same again!
+- Avoid duplicates to already scraped URLs!
 
 {learnings_text}
 """
@@ -150,7 +149,7 @@ WICHTIG:
 
 def parse_pick_urls_response(response: str) -> list[str]:
     """
-    Parst die Pick-URLs-Response (nur URLs).
+    Parses the Pick-URLs response (URLs only).
 
     Security:
     - Response length is limited
@@ -161,7 +160,7 @@ def parse_pick_urls_response(response: str) -> list[str]:
         response: LLM Response
 
     Returns:
-        Liste der URLs (only safe URLs)
+        List of URLs (only safe URLs)
     """
     # Security: Limit response length
     if len(response) > 100_000:
@@ -188,7 +187,7 @@ def parse_pick_urls_response(response: str) -> list[str]:
 
 def parse_pick_urls_full(response: str) -> dict:
     """
-    Parst die Pick-URLs-Response KOMPLETT (URLs + Rejections).
+    Parses the Pick-URLs response COMPLETELY (URLs + Rejections).
 
     Security:
     - Response length is limited
@@ -199,9 +198,9 @@ def parse_pick_urls_full(response: str) -> dict:
         response: LLM Response
 
     Returns:
-        dict mit:
-        - urls: Liste der ausgewählten URLs (only safe URLs)
-        - rejections: Liste der Rejection-Gründe (z.B. "5 URLs wegen Paywall")
+        dict with:
+        - urls: List of selected URLs (only safe URLs)
+        - rejections: List of rejection reasons (e.g. "5 URLs due to paywall")
     """
     # Security: Limit response length
     if len(response) > 100_000:

@@ -1,15 +1,15 @@
 """
-Meta-Synthese Prompt v2.0
-=========================
-Findet QUERVERBINDUNGEN zwischen unabhängig recherchierten Bereichs-Synthesen
-und erstellt wissenschaftlich fundierte Schlussfolgerungen.
+Meta-Synthesis Prompt v2.0
+==========================
+Finds CROSS-CONNECTIONS between independently researched area syntheses
+and creates scientifically founded conclusions.
 
 v2.0 UPDATES:
-- Toulmin-Argumentation (Claim + Evidence + Warrant + Qualifier + Rebuttal)
-- Evidenz-Grading (Level I-VII für jede Quelle)
-- PRISMA-artige Methodik-Transparenz
-- Aktive Falsifikations-Suche
-- Parser-kompatibles Format
+- Toulmin argumentation (Claim + Evidence + Warrant + Qualifier + Rebuttal)
+- Evidence grading (Level I-VII for each source)
+- PRISMA-like methodology transparency
+- Active falsification search
+- Parser-compatible format
 """
 
 import re
@@ -20,322 +20,314 @@ from lutum.core.api_config import get_api_key
 
 logger = get_logger(__name__)
 
-# Gleiches Modell wie Final Synthesis - braucht Premium für Qualität
+# Same model as Final Synthesis - needs premium for quality
 META_SYNTHESIS_MODEL = "anthropic/claude-sonnet-4.5"
-META_SYNTHESIS_TIMEOUT = 600  # 10 Minuten
+META_SYNTHESIS_TIMEOUT = 600  # 10 minutes
 
-META_SYNTHESIS_SYSTEM_PROMPT = """Du bist ein Meister der wissenschaftlichen Synthese und Argumentation.
-
-═══════════════════════════════════════════════════════════════════
-                    SPRACHE (KRITISCH!)
-═══════════════════════════════════════════════════════════════════
-
-WICHTIG: Antworte IMMER in der Sprache der ursprünglichen Nutzer-Anfrage!
-- Deutsche Anfrage → Deutsche Meta-Synthese
-- English query → English meta-synthesis
-- Alle Sektionen, Überschriften und Inhalte in der gleichen Sprache!
+META_SYNTHESIS_SYSTEM_PROMPT = """You are a master of scientific synthesis and argumentation.
 
 ═══════════════════════════════════════════════════════════════════
-                    FORMAT-MARKER (PFLICHT!)
+                    FORMAT MARKERS (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-Diese Marker ermöglichen automatisches Parsing - EXAKT so verwenden:
+These markers enable automatic parsing - use EXACTLY like this:
 
-SEKTIONEN:      ## EMOJI TITEL
-                Beispiel: ## 🔗 QUERVERBINDUNGEN
+SECTIONS:       ## EMOJI TITLE
+                Example: ## 🔗 CROSS-CONNECTIONS
 
-SUB-SEKTIONEN:  ### Untertitel
-                Beispiel: ### Verbindung 1: Thermodynamik ↔ Biologie
+SUB-SECTIONS:   ### Subtitle
+                Example: ### Connection 1: Thermodynamics ↔ Biology
 
-TABELLEN:       | Col1 | Col2 | Col3 |
+TABLES:         | Col1 | Col2 | Col3 |
                 |------|------|------|
                 | data | data | data |
 
-LISTEN:         1) Erster Punkt
-                2) Zweiter Punkt
-                (NICHT 1. oder - für nummerierte Listen!)
+LISTS:          1) First point
+                2) Second point
+                (NOT 1. or - for numbered lists!)
 
-HIGHLIGHT-BOX:  > 💡 **Wichtig:** Text hier
-                > ⚠️ **Warnung:** Text hier
-                > ❓ **Offen:** Text hier
+HIGHLIGHT BOX:  > 💡 **Important:** Text here
+                > ⚠️ **Warning:** Text here
+                > ❓ **Open:** Text here
 
-KEY-VALUE:      - **Schlüssel:** Wert
+KEY-VALUE:      - **Key:** Value
 
-CITATION:       Text mit Quellenbeleg[1] und weiterer Beleg[2][3]
+CITATION:       Text with source reference[1] and another reference[2][3]
 
-ABSCHLUSS:      === END META-SYNTHESIS ===
-
-═══════════════════════════════════════════════════════════════════
-                    DEINE AUFGABE
-═══════════════════════════════════════════════════════════════════
-
-Du erhältst N UNABHÄNGIG recherchierte Bereichs-Synthesen.
-
-Diese Bereiche wurden PARALLEL erforscht - ohne Wissen voneinander.
-Jetzt findest du VERBINDUNGEN die erst sichtbar werden wenn man
-alle Bereiche zusammen betrachtet.
-
-DAS IST NICHT:
-- Zusammenfassen was in den Bereichen steht
-- Wiederholen der Kernerkenntnisse
-- Aneinanderreihen der Synthesen
-
-DAS IST:
-- NEUE Erkenntnisse aus der KOMBINATION
-- QUERVERBINDUNGEN die niemand sehen konnte
-- WIDERSPRÜCHE und deren Auflösung
-- MUSTER über alle Bereiche
-- BEWEISE für Schlussfolgerungen
+END MARKER:     === END META-SYNTHESIS ===
 
 ═══════════════════════════════════════════════════════════════════
-                    TOULMIN-ARGUMENTATION (PFLICHT!)
+                    YOUR TASK
 ═══════════════════════════════════════════════════════════════════
 
-Jede wichtige Schlussfolgerung MUSS dem Toulmin-Modell folgen:
+You receive N INDEPENDENTLY researched area syntheses.
+
+These areas were researched in PARALLEL - without knowledge of each other.
+Now you find CONNECTIONS that only become visible when viewing
+all areas together.
+
+THIS IS NOT:
+- Summarizing what's in the areas
+- Repeating the core findings
+- Stringing syntheses together
+
+THIS IS:
+- NEW insights from the COMBINATION
+- CROSS-CONNECTIONS nobody could see
+- CONTRADICTIONS and their resolution
+- PATTERNS across all areas
+- EVIDENCE for conclusions
+
+═══════════════════════════════════════════════════════════════════
+                    TOULMIN ARGUMENTATION (MANDATORY!)
+═══════════════════════════════════════════════════════════════════
+
+Every important conclusion MUST follow the Toulmin model:
 
 ┌─────────────────────────────────────────────────────────────────┐
-│ CLAIM:     Die Behauptung die du aufstellst                     │
-│ GROUNDS:   Die Evidenz die den Claim stützt [mit Citations]     │
-│ WARRANT:   WARUM die Evidenz den Claim stützt (die Logik)       │
-│ BACKING:   Zusätzliche Stützung des Warrants                    │
-│ QUALIFIER: Unter welchen Bedingungen gilt der Claim?            │
-│ REBUTTAL:  Gegenargumente und warum sie den Claim nicht kippen  │
+│ CLAIM:     The assertion you make                               │
+│ GROUNDS:   The evidence supporting the claim [with citations]   │
+│ WARRANT:   WHY the evidence supports the claim (the logic)      │
+│ BACKING:   Additional support for the warrant                   │
+│ QUALIFIER: Under what conditions does the claim apply?          │
+│ REBUTTAL:  Counter-arguments and why they don't overturn claim  │
 └─────────────────────────────────────────────────────────────────┘
 
-BEISPIEL:
-- **Claim:** P≠NP ist eine physikalische Notwendigkeit
-- **Grounds:** Thermodynamische Analysen zeigen exponentielle Entropiekosten[1][2]
-- **Warrant:** Exponentielle Entropie würde den 2. Hauptsatz verletzen
-- **Backing:** Der 2. Hauptsatz ist das am besten bestätigte Naturgesetz
-- **Qualifier:** In klassischen Berechnungsmodellen (nicht Quanten)
-- **Rebuttal:** Quantenalgorithmen könnten Kosten reduzieren, aber Messungen bleiben irreversibel[3]
+EXAMPLE:
+- **Claim:** P≠NP is a physical necessity
+- **Grounds:** Thermodynamic analyses show exponential entropy costs[1][2]
+- **Warrant:** Exponential entropy would violate the 2nd law of thermodynamics
+- **Backing:** The 2nd law is the best-confirmed law of nature
+- **Qualifier:** In classical computation models (not quantum)
+- **Rebuttal:** Quantum algorithms could reduce costs, but measurements remain irreversible[3]
 
-OHNE Toulmin-Struktur ist eine Schlussfolgerung NICHT wissenschaftlich!
-
-═══════════════════════════════════════════════════════════════════
-                    EVIDENZ-GRADING (PFLICHT!)
-═══════════════════════════════════════════════════════════════════
-
-Bewerte jede Quelle nach dem GRADE-System:
-
-| Level | Beschreibung | Beispiele |
-|-------|--------------|-----------|
-| I | Systematic Reviews / Meta-Analysen | Cochrane Reviews, Meta-Analysen |
-| II | Einzelne RCTs / hochwertige Studien | Nature, Science, Peer-reviewed |
-| III | Kontrollierte Studien ohne Randomisierung | Kohortenstudien |
-| IV | Fall-Kontroll-Studien | Observationsstudien |
-| V | Systematische Reviews deskriptiver Studien | Qualitative Reviews |
-| VI | Einzelne deskriptive Studien | Case Reports, Surveys |
-| VII | Expertenmeinungen | Blogs, Foren, Reddit |
-
-In der Synthese MUSS klar sein:
-- Welches Evidenz-Level stützt welchen Claim?
-- Wo stützt Level I-II? (starke Evidenz)
-- Wo nur Level VI-VII? (schwache Evidenz, mehr Forschung nötig)
-
-FORMAT: "Claim X wird durch Level II Evidenz gestützt[1][2], während
-Claim Y nur auf Level VII Expertenmeinungen basiert[3]."
+WITHOUT Toulmin structure a conclusion is NOT scientific!
 
 ═══════════════════════════════════════════════════════════════════
-                    FALSIFIKATIONS-PFLICHT (NEU!)
+                    EVIDENCE GRADING (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-Für jede wichtige Schlussfolgerung MUSST du aktiv suchen:
+Rate each source according to the GRADE system:
 
-1. **Was würde diese Schlussfolgerung WIDERLEGEN?**
-   - Welche Evidenz würde den Claim falsifizieren?
-   - Gibt es diese Evidenz in den Quellen?
+| Level | Description | Examples |
+|-------|-------------|----------|
+| I | Systematic Reviews / Meta-analyses | Cochrane Reviews, Meta-analyses |
+| II | Individual RCTs / high-quality studies | Nature, Science, peer-reviewed |
+| III | Controlled studies without randomization | Cohort studies |
+| IV | Case-control studies | Observational studies |
+| V | Systematic reviews of descriptive studies | Qualitative reviews |
+| VI | Individual descriptive studies | Case reports, surveys |
+| VII | Expert opinions | Blogs, forums, Reddit |
 
-2. **Welche Gegenargumente existieren?**
-   - Was sagen Kritiker?
-   - Warum sind deren Argumente (nicht) überzeugend?
+In the synthesis it MUST be clear:
+- Which evidence level supports which claim?
+- Where does Level I-II support? (strong evidence)
+- Where only Level VI-VII? (weak evidence, more research needed)
 
-3. **Wo sind die GRENZEN des Claims?**
-   - Unter welchen Bedingungen gilt er NICHT?
-   - Welche Annahmen sind erforderlich?
-
-Eine Schlussfolgerung ohne Falsifikations-Analyse ist keine Wissenschaft!
+FORMAT: "Claim X is supported by Level II evidence[1][2], while
+Claim Y is based only on Level VII expert opinions[3]."
 
 ═══════════════════════════════════════════════════════════════════
-                    VERBINDUNGS-TYPEN
+                    FALSIFICATION REQUIREMENT (NEW!)
 ═══════════════════════════════════════════════════════════════════
 
-Suche nach diesen Typen von Querverbindungen:
+For every important conclusion you MUST actively search:
 
-1. **KAUSAL**: A verursacht B (nicht nur Korrelation!)
-2. **ANALOG**: A funktioniert ähnlich wie B (strukturelle Ähnlichkeit)
-3. **KONTRÄR**: A widerspricht B (produktive Spannung)
-4. **KOMPLEMENTÄR**: A und B ergänzen sich (Synergieeffekt)
-5. **EMERGENT**: A+B+C zusammen erzeugen neues Phänomen D
+1. **What would REFUTE this conclusion?**
+   - What evidence would falsify the claim?
+   - Does this evidence exist in the sources?
 
-Für jede Verbindung: Welcher Typ ist es und warum?
-"""
+2. **What counter-arguments exist?**
+   - What do critics say?
+   - Why are their arguments (not) convincing?
+
+3. **Where are the LIMITS of the claim?**
+   - Under what conditions does it NOT apply?
+   - What assumptions are required?
+
+A conclusion without falsification analysis is not science!
+
+═══════════════════════════════════════════════════════════════════
+                    CONNECTION TYPES
+═══════════════════════════════════════════════════════════════════
+
+Look for these types of cross-connections:
+
+1. **CAUSAL**: A causes B (not just correlation!)
+2. **ANALOGOUS**: A works similarly to B (structural similarity)
+3. **CONTRARY**: A contradicts B (productive tension)
+4. **COMPLEMENTARY**: A and B complement each other (synergy effect)
+5. **EMERGENT**: A+B+C together create new phenomenon D
+
+For each connection: What type is it and why?
+
+CRITICAL - LANGUAGE: Always respond in the same language as the user's original query shown below."""
 
 META_SYNTHESIS_USER_PROMPT = """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                        META-SYNTHESE-AUFTRAG                                  ║
+║                        META-SYNTHESIS TASK                                    ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
-URSPRÜNGLICHE FORSCHUNGSFRAGE:
+ORIGINAL RESEARCH QUESTION:
 {user_query}
 
 ════════════════════════════════════════════════════════════════════════════════
-                         BEREICHS-SYNTHESEN
+                         AREA SYNTHESES
 ════════════════════════════════════════════════════════════════════════════════
 
 {all_syntheses}
 
 ════════════════════════════════════════════════════════════════════════════════
-                         AUSGABE-STRUKTUR
+                         OUTPUT STRUCTURE
 ════════════════════════════════════════════════════════════════════════════════
 
-Erstelle die Meta-Synthese mit diesen Sektionen:
+Create the meta-synthesis with these sections:
 
 ---
 
-## 🔬 METHODIK-TRANSPARENZ
+## 🔬 METHODOLOGY TRANSPARENCY
 
-### Quellenübersicht
+### Source Overview
 
-| Bereich | Quellen | Level I-II | Level III-V | Level VI-VII |
-|---------|---------|------------|-------------|--------------|
-| Bereich 1 | N | X | Y | Z |
-| Bereich 2 | N | X | Y | Z |
+| Area | Sources | Level I-II | Level III-V | Level VI-VII |
+|------|---------|------------|-------------|--------------|
+| Area 1 | N | X | Y | Z |
+| Area 2 | N | X | Y | Z |
 | ... | ... | ... | ... | ... |
 
-### Evidenz-Verteilung
+### Evidence Distribution
 
-> 💡 **Stärken:** Wo haben wir starke Evidenz (Level I-II)?
+> 💡 **Strengths:** Where do we have strong evidence (Level I-II)?
 
-> ⚠️ **Schwächen:** Wo basieren wir nur auf schwacher Evidenz (Level VI-VII)?
+> ⚠️ **Weaknesses:** Where do we rely only on weak evidence (Level VI-VII)?
 
-### Systematische Lücken
+### Systematic Gaps
 
-Was wurde NICHT gefunden oder abgedeckt?
-1) Lücke 1 - warum problematisch
-2) Lücke 2 - warum problematisch
-
----
-
-## 🔗 QUERVERBINDUNGEN
-
-### Verbindung 1: [Prägnanter Titel]
-
-- **Bereiche:** Bereich X ↔ Bereich Y
-- **Typ:** [Kausal/Analog/Konträr/Komplementär/Emergent]
-- **Erkenntnis:** Was verbindet sie auf nicht-offensichtliche Weise?
-
-**Toulmin-Analyse:**
-- **Claim:** [Die Verbindungs-Behauptung]
-- **Grounds:** [Evidenz aus beiden Bereichen][Citations]
-- **Warrant:** [WARUM diese Evidenz die Verbindung beweist]
-- **Qualifier:** [Unter welchen Bedingungen gilt das?]
-- **Rebuttal:** [Gegenargumente und deren Widerlegung]
-
-### Verbindung 2: [Prägnanter Titel]
-[Gleiche Struktur]
-
-### Verbindung N: [Prägnanter Titel]
-[Mindestens 3 nicht-triviale Verbindungen!]
+What was NOT found or covered?
+1) Gap 1 - why problematic
+2) Gap 2 - why problematic
 
 ---
 
-## ⚠️ WIDERSPRÜCHE & SPANNUNGEN
+## 🔗 CROSS-CONNECTIONS
 
-### Widerspruch 1: [Prägnanter Titel]
+### Connection 1: [Concise Title]
 
-- **Bereich X sagt:** [Position A][Citation]
-- **Bereich Y sagt:** [Position B][Citation]
-- **Evidenz-Level:** X basiert auf Level [N], Y auf Level [M]
+- **Areas:** Area X ↔ Area Y
+- **Type:** [Causal/Analogous/Contrary/Complementary/Emergent]
+- **Insight:** What connects them in a non-obvious way?
 
-**Auflösungsversuch:**
-- **Möglichkeit A:** [Wie könnte der Widerspruch aufgelöst werden?]
-- **Möglichkeit B:** [Alternative Erklärung]
-- **Bewertung:** [Welche Auflösung ist wahrscheinlicher und warum?]
+**Toulmin Analysis:**
+- **Claim:** [The connection claim]
+- **Grounds:** [Evidence from both areas][Citations]
+- **Warrant:** [WHY this evidence proves the connection]
+- **Qualifier:** [Under what conditions does this apply?]
+- **Rebuttal:** [Counter-arguments and their refutation]
 
-> ❓ **Falls nicht auflösbar:** Was müsste erforscht werden um diesen Widerspruch zu klären?
+### Connection 2: [Concise Title]
+[Same structure]
 
----
-
-## 🧩 ÜBERGREIFENDE MUSTER
-
-Was zeigt sich erst wenn man ALLE Bereiche zusammen betrachtet?
-
-### Muster 1: [Prägnanter Titel]
-
-- **Beschreibung:** [Das Muster das sich über mehrere Bereiche zieht]
-- **Beobachtet in:** Bereich X, Y, Z
-- **Evidenz-Stärke:** [Wie gut belegt ist dieses Muster?]
-
-> 💡 **Implikation:** Was bedeutet dieses Muster für die Forschungsfrage?
-
-### Muster 2: [Prägnanter Titel]
-[Gleiche Struktur]
+### Connection N: [Concise Title]
+[At least 3 non-trivial connections!]
 
 ---
 
-## 💎 ZENTRALE SCHLUSSFOLGERUNGEN
+## ⚠️ CONTRADICTIONS & TENSIONS
 
-### Schlussfolgerung 1: [Prägnanter Titel]
+### Contradiction 1: [Concise Title]
 
-**Toulmin-Vollanalyse:**
+- **Area X says:** [Position A][Citation]
+- **Area Y says:** [Position B][Citation]
+- **Evidence Level:** X is based on Level [N], Y on Level [M]
 
-| Element | Inhalt |
-|---------|--------|
-| **CLAIM** | [Die Hauptaussage] |
-| **GROUNDS** | [Evidenz mit Citations und Level-Angabe] |
-| **WARRANT** | [Die logische Brücke: WARUM beweist die Evidenz den Claim?] |
-| **BACKING** | [Zusätzliche Stützung des Warrants] |
-| **QUALIFIER** | [Einschränkungen: Wann/wo gilt das?] |
-| **REBUTTAL** | [Gegenargumente und deren Adressierung] |
+**Resolution Attempt:**
+- **Possibility A:** [How could the contradiction be resolved?]
+- **Possibility B:** [Alternative explanation]
+- **Assessment:** [Which resolution is more likely and why?]
 
-**Falsifikations-Check:**
-- **Was würde diesen Claim widerlegen?** [Konkrete Bedingungen]
-- **Existiert diese Gegen-Evidenz?** [Ja/Nein, mit Begründung]
-- **Konfidenz:** [Hoch/Mittel/Niedrig] weil [Begründung]
-
-### Schlussfolgerung 2: [Prägnanter Titel]
-[Gleiche Struktur]
+> ❓ **If not resolvable:** What would need to be researched to clarify this contradiction?
 
 ---
 
-## 🎯 SYNTHESE-FAZIT
+## 🧩 OVERARCHING PATTERNS
 
-### Die Meta-Erkenntnis
+What only becomes visible when viewing ALL areas together?
 
-> 💡 **Ein Satz der die gesamte interdisziplinäre Synthese zusammenfasst:**
-[Der zentrale Takeaway]
+### Pattern 1: [Concise Title]
 
-### Antwort auf die Forschungsfrage
+- **Description:** [The pattern that spans multiple areas]
+- **Observed in:** Area X, Y, Z
+- **Evidence Strength:** [How well supported is this pattern?]
 
-Basierend auf der Synthese aller Bereiche:
+> 💡 **Implication:** What does this pattern mean for the research question?
 
-1) [Hauptantwort mit Evidenz-Level-Angabe]
-2) [Sekundäre Erkenntnis]
-3) [Tertiäre Erkenntnis]
-
-### Was wir NICHT beantworten können
-
-> ⚠️ **Offene Fragen die weitere Forschung erfordern:**
-1) [Offene Frage 1 - warum relevant]
-2) [Offene Frage 2 - warum relevant]
-
-### Empfehlungen für weitere Recherche
-
-Falls die Forschungsfrage tiefer untersucht werden soll:
-1) [Empfehlung 1 - was und warum]
-2) [Empfehlung 2 - was und warum]
+### Pattern 2: [Concise Title]
+[Same structure]
 
 ---
 
-## 📎 QUELLENVERZEICHNIS
+## 💎 CENTRAL CONCLUSIONS
 
-Konsolidiertes Verzeichnis mit Evidenz-Level:
+### Conclusion 1: [Concise Title]
+
+**Full Toulmin Analysis:**
+
+| Element | Content |
+|---------|---------|
+| **CLAIM** | [The main statement] |
+| **GROUNDS** | [Evidence with citations and level indication] |
+| **WARRANT** | [The logical bridge: WHY does the evidence prove the claim?] |
+| **BACKING** | [Additional support for the warrant] |
+| **QUALIFIER** | [Limitations: When/where does this apply?] |
+| **REBUTTAL** | [Counter-arguments and their addressing] |
+
+**Falsification Check:**
+- **What would refute this claim?** [Specific conditions]
+- **Does this counter-evidence exist?** [Yes/No, with justification]
+- **Confidence:** [High/Medium/Low] because [justification]
+
+### Conclusion 2: [Concise Title]
+[Same structure]
+
+---
+
+## 🎯 SYNTHESIS CONCLUSION
+
+### The Meta-Insight
+
+> 💡 **One sentence summarizing the entire interdisciplinary synthesis:**
+[The central takeaway]
+
+### Answer to the Research Question
+
+Based on the synthesis of all areas:
+
+1) [Main answer with evidence level indication]
+2) [Secondary insight]
+3) [Tertiary insight]
+
+### What We CANNOT Answer
+
+> ⚠️ **Open questions requiring further research:**
+1) [Open question 1 - why relevant]
+2) [Open question 2 - why relevant]
+
+### Recommendations for Further Research
+
+If the research question should be investigated deeper:
+1) [Recommendation 1 - what and why]
+2) [Recommendation 2 - what and why]
+
+---
+
+## 📎 SOURCE LIST
+
+Consolidated list with evidence levels:
 
 === SOURCES ===
-[1] URL - Titel | Level: [I-VII]
-[2] URL - Titel | Level: [I-VII]
-[3] URL - Titel | Level: [I-VII]
+[1] URL - Title | Level: [I-VII]
+[2] URL - Title | Level: [I-VII]
+[3] URL - Title | Level: [I-VII]
 ...
 === END SOURCES ===
 
@@ -350,26 +342,26 @@ def build_meta_synthesis_prompt(
     bereichs_synthesen: list[dict]
 ) -> tuple[str, str]:
     """
-    Baut den Meta-Synthese-Prompt.
+    Builds the Meta-Synthesis prompt.
 
     Args:
-        user_query: Ursprüngliche Forschungsfrage
-        bereichs_synthesen: Liste von {bereich_titel: str, synthese: str, sources: list}
+        user_query: Original research question
+        bereichs_synthesen: List of {bereich_titel: str, synthese: str, sources: list}
 
     Returns:
         Tuple (system_prompt, user_prompt)
     """
-    # Bereichs-Synthesen formatieren
+    # Format area syntheses
     synthesen_parts = []
     for i, s in enumerate(bereichs_synthesen, 1):
-        bereich_titel = s.get('bereich_titel', f'Bereich {i}')
+        bereich_titel = s.get('bereich_titel', f'Area {i}')
         synthese_content = s.get('synthese', '')
         sources = s.get('sources', [])
 
         synthesen_parts.append(f"""
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ BEREICH {i}: {bereich_titel}
-│ ({len(sources)} Quellen)
+│ AREA {i}: {bereich_titel}
+│ ({len(sources)} sources)
 └──────────────────────────────────────────────────────────────────────────────┘
 
 {synthese_content}
@@ -387,15 +379,15 @@ def build_meta_synthesis_prompt(
 
 def parse_meta_synthesis_response(response: str) -> tuple[str, dict]:
     """
-    Parst die Meta-Synthese-Response.
+    Parses the Meta-Synthesis response.
 
     Args:
-        response: Volle LLM Response
+        response: Full LLM Response
 
     Returns:
         Tuple (meta_synthesis_text, metadata)
-        - meta_synthesis_text: Der vollständige Text
-        - metadata: Dict mit extrahierten Elementen
+        - meta_synthesis_text: The complete text
+        - metadata: Dict with extracted elements
     """
     metadata = {
         "querverbindungen": 0,
@@ -405,23 +397,25 @@ def parse_meta_synthesis_response(response: str) -> tuple[str, dict]:
         "evidenz_levels": {},
     }
 
-    # Querverbindungen zählen
-    verbindungen = re.findall(r'###\s*Verbindung\s*\d+', response)
+    # Count cross-connections
+    verbindungen = re.findall(r'###\s*Connection\s*\d+', response, re.IGNORECASE)
+    if not verbindungen:
+        verbindungen = re.findall(r'###\s*Verbindung\s*\d+', response)
     metadata["querverbindungen"] = len(verbindungen)
 
-    # Widersprüche/Spannungen zählen
-    widersprueche = re.findall(r'###\s*(?:Widerspruch|Spannung)\s*\d+', response)
+    # Count contradictions/tensions
+    widersprueche = re.findall(r'###\s*(?:Contradiction|Widerspruch|Tension|Spannung)\s*\d+', response, re.IGNORECASE)
     metadata["widersprueche"] = len(widersprueche)
 
-    # Muster zählen
-    muster = re.findall(r'###\s*Muster\s*\d+', response)
+    # Count patterns
+    muster = re.findall(r'###\s*(?:Pattern|Muster)\s*\d+', response, re.IGNORECASE)
     metadata["muster"] = len(muster)
 
-    # Schlussfolgerungen zählen
-    schlussfolgerungen = re.findall(r'###\s*Schlussfolgerung\s*\d+', response)
+    # Count conclusions
+    schlussfolgerungen = re.findall(r'###\s*(?:Conclusion|Schlussfolgerung)\s*\d+', response, re.IGNORECASE)
     metadata["schlussfolgerungen"] = len(schlussfolgerungen)
 
-    # Evidenz-Level aus Sources Block extrahieren
+    # Extract evidence levels from Sources block
     sources_match = re.search(
         r'=== SOURCES ===\n(.+?)\n=== END SOURCES ===',
         response, re.DOTALL
@@ -446,33 +440,33 @@ def parse_meta_synthesis_response(response: str) -> tuple[str, dict]:
 
 # === CLI TEST ===
 if __name__ == "__main__":
-    # Test mit Dummy-Daten
+    # Test with dummy data
     test_synthesen = [
         {
-            "bereich_titel": "Thermodynamik & Statistische Mechanik",
+            "bereich_titel": "Thermodynamics & Statistical Mechanics",
             "synthese": """
-## Kernerkenntnisse
+## Key Findings
 
-1) NP-vollständige Probleme können auf das Ising-Spin-Glas-Modell abgebildet werden[1][2]
-2) Die Energielandschaft zeigt "topologische Turbulenz"[3]
-3) P=NP würde den Zweiten Hauptsatz verletzen[4]
+1) NP-complete problems can be mapped to the Ising spin glass model[1][2]
+2) The energy landscape shows "topological turbulence"[3]
+3) P=NP would violate the Second Law[4]
 """,
             "sources": ["arxiv.org/1", "arxiv.org/2", "arxiv.org/3", "arxiv.org/4"]
         },
         {
-            "bereich_titel": "Biologische Computation",
+            "bereich_titel": "Biological Computation",
             "synthese": """
-## Kernerkenntnisse
+## Key Findings
 
-1) Amöben lösen TSP in linearer Zeit durch physikalische Parallelität[5]
-2) Proteinfaltung ist NP-vollständig aber Proteine falten sich schnell[6]
+1) Amoebas solve TSP in linear time through physical parallelism[5]
+2) Protein folding is NP-complete but proteins fold quickly[6]
 """,
             "sources": ["nature.com/1", "pnas.org/1"]
         },
     ]
 
     system, user = build_meta_synthesis_prompt(
-        "Erkläre P vs NP aus physikalischer Perspektive",
+        "Explain P vs NP from a physical perspective",
         test_synthesen
     )
 

@@ -1,20 +1,20 @@
 """
 Academic Plan Prompt v2.0
 =========================
-Erstellt einen hierarchischen Recherche-Plan mit AUTONOMEN BEREICHEN
-für parallele Deep Research.
+Creates a hierarchical research plan with AUTONOMOUS AREAS
+for parallel deep research.
 
-UNTERSCHIED ZU NORMAL MODE:
-- Normal: Flache Liste (1), (2), (3)... → sequenziell abgearbeitet
-- Academic: Bereiche mit Unterpunkten → parallel abgearbeitet
+DIFFERENCE TO NORMAL MODE:
+- Normal: Flat list (1), (2), (3)... → processed sequentially
+- Academic: Areas with sub-points → processed in parallel
 
-Jeder Bereich ist UNABHÄNGIG erforschbar (keine Abhängigkeiten zwischen Bereichen).
-Key Learnings fließen nur INNERHALB eines Bereichs.
+Each area is INDEPENDENTLY researchable (no dependencies between areas).
+Key learnings flow only WITHIN an area.
 
 v2.0 UPDATES:
-- Evidenz-Diversität pro Bereich (verschiedene Quellentypen)
-- Explizite Perspektiven-Zuweisung
-- Parser-kompatibles Format
+- Evidence diversity per area (different source types)
+- Explicit perspective assignment
+- Parser-compatible format
 """
 
 import re
@@ -30,136 +30,128 @@ logger = get_logger(__name__)
 MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 
-ACADEMIC_PLAN_SYSTEM_PROMPT = """Du bist ein Forschungsarchitekt der multi-disziplinäre Recherche-Pläne erstellt.
+ACADEMIC_PLAN_SYSTEM_PROMPT = """You are a research architect creating multi-disciplinary research plans.
 
 ═══════════════════════════════════════════════════════════════════
-                    SPRACHE (KRITISCH!)
+                    FORMAT MARKERS (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-WICHTIG: Antworte IMMER in der Sprache der ursprünglichen Nutzer-Anfrage!
-- Deutsche Anfrage → Deutscher Plan
-- English query → English plan
-- Die Bereichs-Titel und Punkte müssen in der gleichen Sprache sein!
+These markers enable automatic parsing - use EXACTLY like this:
+
+AREA HEADER:    === AREA N: [Title] ===
+POINTS:         1) Text of the point
+                2) Text of the point
+END MARKER:     === END PLAN ===
 
 ═══════════════════════════════════════════════════════════════════
-                    FORMAT-MARKER (PFLICHT!)
+                    ACADEMIC MODE - WHAT IT IS
 ═══════════════════════════════════════════════════════════════════
 
-Diese Marker ermöglichen automatisches Parsing - EXAKT so verwenden:
+You create a plan with **AUTONOMOUS AREAS** instead of a flat list.
 
-BEREICHS-HEADER:   === BEREICH N: [Titel] ===
-PUNKTE:            1) Text des Punktes
-                   2) Text des Punktes
-ABSCHLUSS:         === END PLAN ===
-
-═══════════════════════════════════════════════════════════════════
-                    ACADEMIC MODE - WAS ES IST
-═══════════════════════════════════════════════════════════════════
-
-Du erstellst einen Plan mit **AUTONOMEN BEREICHEN** statt einer flachen Liste.
-
-WARUM BEREICHE?
-- Jeder Bereich wird PARALLEL recherchiert (nicht sequenziell)
-- Das ermöglicht multidisziplinäre Perspektiven auf das gleiche Problem
-- Am Ende werden die Bereiche in einer META-SYNTHESE zusammengeführt
-- Querverbindungen werden erst NACH der unabhängigen Recherche gefunden
+WHY AREAS?
+- Each area is researched in PARALLEL (not sequentially)
+- This enables multi-disciplinary perspectives on the same problem
+- At the end, areas are combined in a META-SYNTHESIS
+- Cross-connections are only found AFTER independent research
 
 ═══════════════════════════════════════════════════════════════════
-                    PERSPEKTIVEN-DIVERSITÄT (NEU!)
+                    PERSPECTIVE DIVERSITY (NEW!)
 ═══════════════════════════════════════════════════════════════════
 
-Jeder Bereich sollte eine ANDERE PERSPEKTIVE repräsentieren:
+Each area should represent a DIFFERENT PERSPECTIVE:
 
-MÖGLICHE PERSPEKTIVEN (wähle 3-5 passende):
-- **Theoretisch/Fundamental**: Grundlagen, Prinzipien, Axiome
-- **Empirisch/Experimental**: Studien, Daten, Messungen
-- **Praktisch/Angewandt**: Implementierungen, Use Cases, Tools
-- **Kritisch/Skeptisch**: Gegenargumente, Limitationen, Kontroversen
-- **Historisch/Evolutionär**: Entwicklung, Meilensteine, Trends
-- **Interdisziplinär**: Verbindungen zu anderen Feldern
-- **Zukunft/Spekulativ**: Prognosen, offene Fragen, Forschungslücken
+POSSIBLE PERSPECTIVES (choose 3-5 fitting ones):
+- **Theoretical/Fundamental**: Basics, principles, axioms
+- **Empirical/Experimental**: Studies, data, measurements
+- **Practical/Applied**: Implementations, use cases, tools
+- **Critical/Skeptical**: Counter-arguments, limitations, controversies
+- **Historical/Evolutionary**: Development, milestones, trends
+- **Interdisciplinary**: Connections to other fields
+- **Future/Speculative**: Predictions, open questions, research gaps
 
-BEISPIEL für "Klimawandel":
-- Bereich 1: Physikalische Grundlagen (Theoretisch)
-- Bereich 2: Messdaten und Modelle (Empirisch)
-- Bereich 3: Gegenargumente und Kontroversen (Kritisch)
-- Bereich 4: Technologische Lösungsansätze (Praktisch)
-
-═══════════════════════════════════════════════════════════════════
-                    EVIDENZ-DIVERSITÄT PRO BEREICH (NEU!)
-═══════════════════════════════════════════════════════════════════
-
-Jeder Bereich sollte verschiedene QUELLENTYPEN ansprechen:
-
-- **Primärquellen**: Originalstudien, Papers, Patente
-- **Sekundärquellen**: Reviews, Meta-Analysen, Lehrbücher
-- **Graue Literatur**: Preprints, Konferenzpaper, Whitepapers
-- **Community**: Foren, Diskussionen, Expertenmeinungen
-- **Praxis**: Dokumentation, Tutorials, Case Studies
-
-Formuliere Punkte so, dass verschiedene Quellentypen gefunden werden!
+EXAMPLE for "Climate Change":
+- Area 1: Physical Fundamentals (Theoretical)
+- Area 2: Measurement Data and Models (Empirical)
+- Area 3: Counter-arguments and Controversies (Critical)
+- Area 4: Technological Solutions (Practical)
 
 ═══════════════════════════════════════════════════════════════════
-                    HARTREGELN (PFLICHT!)
+                    EVIDENCE DIVERSITY PER AREA (NEW!)
 ═══════════════════════════════════════════════════════════════════
 
-1. **AUTONOMIE-REGEL**: Jeder Bereich MUSS unabhängig erforschbar sein!
-   - KEINE Abhängigkeiten zwischen Bereichen
-   - KEINE Verweise wie "basierend auf Bereich 1..."
-   - Jeder Bereich steht für sich allein
+Each area should target different SOURCE TYPES:
 
-2. **BALANCE-REGEL**:
-   - 3-5 Bereiche (optimal: 4)
-   - 2-4 Punkte pro Bereich
-   - Ähnliche Tiefe pro Bereich
+- **Primary sources**: Original studies, papers, patents
+- **Secondary sources**: Reviews, meta-analyses, textbooks
+- **Gray literature**: Preprints, conference papers, whitepapers
+- **Community**: Forums, discussions, expert opinions
+- **Practice**: Documentation, tutorials, case studies
 
-3. **DIVERSITÄTS-REGEL**:
-   - Verschiedene PERSPEKTIVEN (nicht nur verschiedene Themen)
-   - Mindestens 1 kritischer/skeptischer Bereich wenn kontrovers
-
-4. **KONKRETHEIT-REGEL**:
-   - Jeder Punkt beginnt mit Verb (Recherchiere, Analysiere, Vergleiche...)
-   - Jeder Punkt hat ein messbares Ziel
-   - Jeder Punkt ist googlebar
+Formulate points so that different source types are found!
 
 ═══════════════════════════════════════════════════════════════════
-                    BEISPIEL KOMPLETTES OUTPUT
+                    HARD RULES (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
-Frage: "Ist Kernfusion eine realistische Energiequelle?"
+1. **AUTONOMY RULE**: Each area MUST be independently researchable!
+   - NO dependencies between areas
+   - NO references like "based on Area 1..."
+   - Each area stands on its own
 
-=== BEREICH 1: Physikalische Grundlagen (Theoretisch) ===
-1) Recherchiere die fundamentalen Fusionsreaktionen (D-T, D-D, p-B11) und deren Energieausbeute
-2) Analysiere das Lawson-Kriterium und die Anforderungen an Plasma-Confinement
-3) Vergleiche die theoretischen Effizienzgrenzen mit Fission und Renewables
+2. **BALANCE RULE**:
+   - 3-5 areas (optimal: 4)
+   - 2-4 points per area
+   - Similar depth per area
 
-=== BEREICH 2: Experimenteller Stand (Empirisch) ===
-1) Dokumentiere die Ergebnisse von ITER, NIF, JET und anderen Großexperimenten
-2) Recherchiere den aktuellen Q-Faktor-Rekord und die Entwicklung seit 2020
-3) Analysiere peer-reviewed Papers zu Plasma-Instabilitäten und deren Lösungen
+3. **DIVERSITY RULE**:
+   - Different PERSPECTIVES (not just different topics)
+   - At least 1 critical/skeptical area if controversial
 
-=== BEREICH 3: Kritik und Hindernisse (Skeptisch) ===
-1) Sammle Argumente von Fusionskritikern (Kosten, Zeitrahmen, Materialprobleme)
-2) Recherchiere das "50 Jahre entfernt"-Problem und historische Fehlprognosen
-3) Analysiere die Tritium-Verfügbarkeit und Breeding-Ratio-Problematik
+4. **CONCRETENESS RULE**:
+   - Each point begins with verb (Research, Analyze, Compare...)
+   - Each point has a measurable goal
+   - Each point is googleable
 
-=== BEREICH 4: Kommerzielle Entwicklung (Praktisch) ===
-1) Identifiziere private Fusionsunternehmen (Commonwealth, TAE, Helion) und deren Ansätze
-2) Recherchiere Investitionssummen und Zeitpläne für kommerzielle Reaktoren
-3) Vergleiche alternative Confinement-Methoden (Tokamak vs. Stellarator vs. Laser)
+═══════════════════════════════════════════════════════════════════
+                    EXAMPLE COMPLETE OUTPUT
+═══════════════════════════════════════════════════════════════════
 
-=== BEREICH 5: Energiepolitischer Kontext (Interdisziplinär) ===
-1) Analysiere Fusion im Vergleich zu anderen Dekarbonisierungspfaden
-2) Recherchiere politische Förderprogramme und deren Begründungen
-3) Untersuche die Rolle von Fusion in Energieszenarien (IEA, IPCC)
+Question: "Is nuclear fusion a realistic energy source?"
+
+=== AREA 1: Physical Fundamentals (Theoretical) ===
+1) Research the fundamental fusion reactions (D-T, D-D, p-B11) and their energy yield
+2) Analyze the Lawson criterion and requirements for plasma confinement
+3) Compare theoretical efficiency limits with fission and renewables
+
+=== AREA 2: Experimental Status (Empirical) ===
+1) Document results from ITER, NIF, JET and other large experiments
+2) Research the current Q-factor record and development since 2020
+3) Analyze peer-reviewed papers on plasma instabilities and their solutions
+
+=== AREA 3: Criticism and Obstacles (Skeptical) ===
+1) Collect arguments from fusion critics (costs, timeline, material problems)
+2) Research the "50 years away" problem and historical failed predictions
+3) Analyze tritium availability and breeding ratio issues
+
+=== AREA 4: Commercial Development (Practical) ===
+1) Identify private fusion companies (Commonwealth, TAE, Helion) and their approaches
+2) Research investment amounts and timelines for commercial reactors
+3) Compare alternative confinement methods (Tokamak vs. Stellarator vs. Laser)
+
+=== AREA 5: Energy Policy Context (Interdisciplinary) ===
+1) Analyze fusion compared to other decarbonization pathways
+2) Research political funding programs and their justifications
+3) Investigate the role of fusion in energy scenarios (IEA, IPCC)
 
 === END PLAN ===
-"""
+
+CRITICAL - LANGUAGE: Always respond in the same language as the user's original query shown below."""
 
 
 def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 3000) -> tuple[Optional[str], Optional[str]]:
     """
-    Ruft LLM via OpenRouter auf.
+    Calls LLM via OpenRouter.
 
     Returns:
         Tuple (response_text, error_message)
@@ -213,37 +205,37 @@ def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 3000) -> t
 
 def create_academic_plan(context: ContextState) -> dict:
     """
-    Erstellt einen hierarchischen Academic-Recherche-Plan mit autonomen Bereichen.
+    Creates a hierarchical Academic research plan with autonomous areas.
 
     Args:
-        context: ContextState mit Query, Rückfragen und Antworten
+        context: ContextState with query, follow-up questions and answers
 
     Returns:
-        dict mit:
-        - bereiche: Dict {bereich_titel: [punkt1, punkt2, ...]}
-        - plan_text: Formatierter Plan-Text
-        - raw_response: Rohe LLM Antwort
-        - error: Fehlermeldung falls aufgetreten
+        dict with:
+        - bereiche: Dict {area_title: [point1, point2, ...]}
+        - plan_text: Formatted plan text
+        - raw_response: Raw LLM response
+        - error: Error message if occurred
     """
     logger.info("Creating ACADEMIC research plan with autonomous areas...")
 
     try:
-        # Context für LLM formatieren
+        # Format context for LLM
         context_text = context.format_for_llm()
 
         user_prompt = f"""{context_text}
 
-Erstelle jetzt einen ACADEMIC MODE Recherche-Plan mit autonomen Bereichen.
+Now create an ACADEMIC MODE research plan with autonomous areas.
 
-WICHTIG:
-- 3-5 Bereiche mit verschiedenen PERSPEKTIVEN
-- 2-4 Punkte pro Bereich
-- Jeder Bereich MUSS unabhängig erforschbar sein
-- Mindestens 1 kritischer Bereich wenn das Thema kontrovers ist
-- Nutze das exakte Format mit === BEREICH N: [Titel] ===
-- Beende mit === END PLAN ===
+IMPORTANT:
+- 3-5 areas with different PERSPECTIVES
+- 2-4 points per area
+- Each area MUST be independently researchable
+- At least 1 critical area if the topic is controversial
+- Use the exact format with === AREA N: [Title] ===
+- End with === END PLAN ===
 
-Antworte in der Sprache der ursprünglichen Anfrage!"""
+Respond in the same language as the original query!"""
 
         logger.debug(f"Academic plan prompt length: {len(user_prompt)} chars")
 
@@ -255,7 +247,7 @@ Antworte in der Sprache der ursprünglichen Anfrage!"""
         if not raw_response:
             return {"error": "Empty response from LLM", "bereiche": {}}
 
-        # Bereiche parsen
+        # Parse areas
         bereiche = parse_academic_plan(raw_response)
 
         if len(bereiche) < 2:
@@ -278,37 +270,37 @@ Antworte in der Sprache der ursprünglichen Anfrage!"""
 
 def parse_academic_plan(text: str) -> dict[str, list[str]]:
     """
-    Parst den hierarchischen Academic Plan.
+    Parses the hierarchical Academic Plan.
 
     Input Format:
-    === BEREICH 1: Thermodynamik ===
-    1) Punkt eins
-    2) Punkt zwei
-    === BEREICH 2: Biologie ===
-    1) Punkt eins
+    === AREA 1: Thermodynamics ===
+    1) Point one
+    2) Point two
+    === AREA 2: Biology ===
+    1) Point one
     ...
     === END PLAN ===
 
     Returns:
-        Dict {bereich_titel: [punkt1, punkt2, ...]}
+        Dict {area_title: [point1, point2, ...]}
     """
     bereiche = {}
 
-    # Pattern für Bereich-Header
-    bereich_pattern = r'===\s*BEREICH\s*\d+:\s*(.+?)\s*==='
+    # Pattern for area header (supports both AREA and BEREICH for compatibility)
+    bereich_pattern = r'===\s*(?:AREA|BEREICH)\s*\d+:\s*(.+?)\s*==='
 
-    # Finde alle Bereich-Header und ihre Positionen
+    # Find all area headers and their positions
     headers = list(re.finditer(bereich_pattern, text, re.IGNORECASE))
 
     for i, header_match in enumerate(headers):
         bereich_titel = header_match.group(1).strip()
 
-        # Content zwischen diesem Header und dem nächsten (oder END PLAN)
+        # Content between this header and the next (or END PLAN)
         start_pos = header_match.end()
         if i + 1 < len(headers):
             end_pos = headers[i + 1].start()
         else:
-            # Bis END PLAN oder Ende
+            # Until END PLAN or end
             end_match = re.search(r'===\s*END\s*PLAN\s*===', text[start_pos:], re.IGNORECASE)
             if end_match:
                 end_pos = start_pos + end_match.start()
@@ -317,15 +309,15 @@ def parse_academic_plan(text: str) -> dict[str, list[str]]:
 
         bereich_content = text[start_pos:end_pos]
 
-        # Punkte aus dem Bereich extrahieren
-        # Format: 1) Text oder - Text
+        # Extract points from the area
+        # Format: 1) Text or - Text
         punkt_pattern = r'(?:^\s*\d+\)|\s*-)\s*(.+?)(?=\n\s*\d+\)|\n\s*-|\n\s*===|\Z)'
         punkt_matches = re.findall(punkt_pattern, bereich_content, re.MULTILINE | re.DOTALL)
 
         punkte = []
         for punkt in punkt_matches:
             clean_punkt = " ".join(punkt.split()).strip()
-            if clean_punkt and len(clean_punkt) > 10:  # Mindestlänge für sinnvollen Punkt
+            if clean_punkt and len(clean_punkt) > 10:  # Minimum length for meaningful point
                 punkte.append(clean_punkt)
 
         if punkte:
@@ -336,13 +328,13 @@ def parse_academic_plan(text: str) -> dict[str, list[str]]:
 
 
 def format_academic_plan(bereiche: dict[str, list[str]]) -> str:
-    """Formatiert Academic Plan für Anzeige."""
+    """Formats Academic Plan for display."""
     if not bereiche:
-        return "Kein Plan erstellt."
+        return "No plan created."
 
     lines = []
     for i, (bereich_titel, punkte) in enumerate(bereiche.items(), 1):
-        lines.append(f"\n**Bereich {i}: {bereich_titel}**")
+        lines.append(f"\n**Area {i}: {bereich_titel}**")
         for j, punkt in enumerate(punkte, 1):
             lines.append(f"  {j}) {punkt}")
 
@@ -352,9 +344,9 @@ def format_academic_plan(bereiche: dict[str, list[str]]) -> str:
 # === CLI TEST ===
 if __name__ == "__main__":
     ctx = ContextState()
-    ctx.user_query = "Ist Kernfusion eine realistische Energiequelle?"
-    ctx.clarification_questions = ["Welche Aspekte interessieren dich besonders?"]
-    ctx.clarification_answers = ["Technische Machbarkeit und Zeitrahmen"]
+    ctx.user_query = "Is nuclear fusion a realistic energy source?"
+    ctx.clarification_questions = ["What aspects interest you most?"]
+    ctx.clarification_answers = ["Technical feasibility and timeline"]
 
     print("Context for LLM:")
     print("=" * 60)

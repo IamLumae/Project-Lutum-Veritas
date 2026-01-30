@@ -1,99 +1,97 @@
 """
 Think Prompt (Prompt 2)
 =======================
-LLM überlegt welche Informationen benötigt werden und generiert Suchanfragen.
+LLM analyzes what information is needed and generates search queries.
 
-Rekursiv: Wird für jeden Punkt im Research Plan ausgeführt.
+Recursive: Executed for each point in the Research Plan.
 """
 
-THINK_SYSTEM_PROMPT = """Du bist ein erfahrener Research-Stratege.
+THINK_SYSTEM_PROMPT = """You are an experienced research strategist.
 
-WICHTIG - SPRACHLICHE ANPASSUNG: Wenn die ursprüngliche Nutzer-Anfrage auf Englisch formuliert wurde, antworte auf Englisch. Wenn sie auf Deutsch war, antworte auf Deutsch.
+Your task: Analyze the current research point and develop a precise search strategy.
+You must determine what information you need and how to find it best.
 
-Deine Aufgabe: Analysiere den aktuellen Recherche-Punkt und entwickle eine
-präzise Suchstrategie. Du musst herausfinden welche Informationen du brauchst
-und wie du sie am besten findest.
+## CRITICAL: SEARCH QUERY FORMAT
 
-## KRITISCH: FORMAT DER SUCHANFRAGEN
+ONLY GENERATE SIMPLE SEARCH TERMS - NO URLS!
 
-GENERIERE NUR EINFACHE SUCHBEGRIFFE - KEINE URLS!
+WRONG: https://github.com/search?q=adaptive+chunking
+WRONG: site:github.com adaptive chunking
+RIGHT: adaptive chunking python implementation
+RIGHT: RAG chunking strategies 2024
 
-FALSCH: https://github.com/search?q=adaptive+chunking
-FALSCH: site:github.com adaptive chunking
-RICHTIG: adaptive chunking python implementation
-RICHTIG: RAG chunking strategies 2024
+Each search query is a simple text string with keywords, NOT a URL!
 
-Jede Suchanfrage ist ein einfacher Text-String mit Keywords, KEINE URL!
+## SEARCH STRATEGY PRINCIPLES
 
-## SUCHSTRATEGIE-PRINZIPIEN
+1. **Specific**: No generic searches. The more precise, the better the results.
+2. **Current**: Include years when recency matters (2024, 2025).
+3. **Source-oriented**: Deliberately include keywords like "github", "paper", "docs", "reddit".
 
-1. **Spezifisch**: Keine generischen Suchen. Je präziser, desto besser die Ergebnisse.
-2. **Aktuell**: Jahreszahlen einbauen wenn Aktualität wichtig ist (2024, 2025).
-3. **Quellenorientiert**: Keywords wie "github", "paper", "docs", "reddit" gezielt einbauen.
+## CRITICAL: DIVERSIFICATION (MANDATORY!)
 
-## KRITISCH: DIVERSIFIZIERUNG (PFLICHT!)
+NEVER fire 10 searches in the same direction!
 
-NIEMALS 10 Suchen in die gleiche Richtung feuern!
+Distribute your searches across AT LEAST 4 different perspectives:
+- **Primary**: Official sources, documentation, original repos, papers
+- **Community**: Discussions, Reddit, HN, forums, experience reports
+- **Practical**: Tutorials, how-tos, implementations, examples
+- **Critical**: Problems, limitations, alternatives, comparisons
+- **Current**: News, "2024", "new", "latest", trends
 
-Verteile deine Suchen auf MINDESTENS 4 verschiedene Perspektiven:
-- **Primär**: Offizielle Quellen, Dokumentation, Original-Repos, Papers
-- **Community**: Diskussionen, Reddit, HN, Foren, Erfahrungsberichte
-- **Praktisch**: Tutorials, How-tos, Implementierungen, Beispiele
-- **Kritisch**: Probleme, Limitationen, Alternativen, Vergleiche
-- **Aktuell**: News, "2024", "neu", "latest", Trends
-
-BEISPIEL - FALSCH (Monokultur):
+EXAMPLE - WRONG (Monoculture):
 search 1: RAG chunking techniques
 search 2: RAG chunking methods
 search 3: RAG chunking strategies
 search 4: RAG chunking best practices
-→ 4x dasselbe in grün!
+→ 4x the same thing!
 
-BEISPIEL - RICHTIG (Diversifiziert):
+EXAMPLE - RIGHT (Diversified):
 search 1: RAG chunking implementation github
 search 2: "chunking problems" RAG reddit
 search 3: RAG chunking vs semantic splitting comparison
 search 4: RAG chunking 2024 new approaches
-"""
+
+CRITICAL - LANGUAGE: Always respond in the same language as the user's original query shown below."""
 
 THINK_USER_PROMPT = """
-# KONTEXT
+# CONTEXT
 
-## Übergeordnete Aufgabe
+## Main Task
 {user_query}
 
-## Aktueller Recherche-Punkt
+## Current Research Point
 {current_point}
 
 {previous_learnings_block}
 
 ---
 
-# AUFGABE
+# TASK
 
-Denke darüber nach welche Informationen du brauchst um den Recherche-Punkt
-"{current_point}" gründlich zu bearbeiten.
+Think about what information you need to thoroughly work on the research point
+"{current_point}".
 
-Entwickle eine Suchstrategie mit konkreten Google-Suchanfragen.
+Develop a search strategy with concrete Google search queries.
 
 ---
 
-# FORMAT (EXAKT SO - Kategorie ist PFLICHT!)
+# FORMAT (EXACTLY LIKE THIS - Category is MANDATORY!)
 
 === THINKING ===
-[Deine Überlegungen: Was brauchst du? Warum? Welche Aspekte sind wichtig?]
+[Your thoughts: What do you need? Why? Which aspects are important?]
 
 === SEARCHES ===
-search 1 (Primär): [offizielle Quelle, Docs, Repo, Paper]
-search 2 (Primär): [offizielle Quelle, Docs, Repo, Paper]
-search 3 (Community): [Reddit, HN, Forum, Diskussion]
-search 4 (Community): [Reddit, HN, Forum, Diskussion]
-search 5 (Praktisch): [Tutorial, How-to, Beispiel, Implementation]
-search 6 (Praktisch): [Tutorial, How-to, Beispiel, Implementation]
-search 7 (Kritisch): [Probleme, Limitationen, Alternativen, Vergleich]
-search 8 (Kritisch): [Probleme, Limitationen, Alternativen, Vergleich]
-search 9 (Aktuell): [News, 2024, 2025, neu, latest, Trends]
-search 10 (Aktuell): [News, 2024, 2025, neu, latest, Trends]
+search 1 (Primary): [official source, docs, repo, paper]
+search 2 (Primary): [official source, docs, repo, paper]
+search 3 (Community): [Reddit, HN, forum, discussion]
+search 4 (Community): [Reddit, HN, forum, discussion]
+search 5 (Practical): [Tutorial, how-to, example, implementation]
+search 6 (Practical): [Tutorial, how-to, example, implementation]
+search 7 (Critical): [Problems, limitations, alternatives, comparison]
+search 8 (Critical): [Problems, limitations, alternatives, comparison]
+search 9 (Current): [News, 2024, 2025, new, latest, trends]
+search 10 (Current): [News, 2024, 2025, new, latest, trends]
 """
 
 
@@ -103,27 +101,27 @@ def build_think_prompt(
     previous_learnings: list[str] | None = None
 ) -> tuple[str, str]:
     """
-    Baut den Think-Prompt.
+    Builds the Think prompt.
 
     Args:
-        user_query: Übergeordnete Aufgabe
-        current_point: Aktueller Recherche-Punkt
-        previous_learnings: Liste der Key Learnings aus vorherigen Punkten (optional)
+        user_query: Main task
+        current_point: Current research point
+        previous_learnings: List of key learnings from previous points (optional)
 
     Returns:
         Tuple (system_prompt, user_prompt)
     """
-    # Previous Learnings Block formatieren
+    # Format previous learnings block
     if previous_learnings and len(previous_learnings) > 0:
         learnings_text = "\n\n---\n".join(
-            f"**Punkt {i+1}:**\n{learning}"
+            f"**Point {i+1}:**\n{learning}"
             for i, learning in enumerate(previous_learnings)
         )
         previous_learnings_block = f"""
-## Bisherige Erkenntnisse (aus vorherigen Punkten)
+## Previous Findings (from earlier points)
 
-WICHTIG: Diese Informationen hast du bereits. Suche NICHT erneut danach!
-Fokussiere dich auf NEUE Aspekte die für "{current_point}" relevant sind.
+IMPORTANT: You already have this information. Do NOT search for it again!
+Focus on NEW aspects relevant to "{current_point}".
 
 {learnings_text}
 """
@@ -141,7 +139,7 @@ Fokussiere dich auf NEUE Aspekte die für "{current_point}" relevant sind.
 
 def parse_think_response(response: str) -> tuple[str, list[str]]:
     """
-    Parst die Think-Response.
+    Parses the Think response.
 
     Args:
         response: LLM Response
@@ -152,7 +150,7 @@ def parse_think_response(response: str) -> tuple[str, list[str]]:
     thinking_block = ""
     searches = []
 
-    # Thinking Block extrahieren
+    # Extract thinking block
     if "=== THINKING ===" in response:
         parts = response.split("=== THINKING ===")
         if len(parts) > 1:
@@ -162,7 +160,7 @@ def parse_think_response(response: str) -> tuple[str, list[str]]:
             else:
                 thinking_block = thinking_part.strip()
 
-    # Searches extrahieren
+    # Extract searches
     if "=== SEARCHES ===" in response:
         search_part = response.split("=== SEARCHES ===")[1]
         for line in search_part.strip().split("\n"):
@@ -170,12 +168,12 @@ def parse_think_response(response: str) -> tuple[str, list[str]]:
             if line.lower().startswith("search"):
                 if ":" in line:
                     query = line.split(":", 1)[1].strip()
-                    # URL-Filter: Wenn LLM URLs generiert, extrahiere Keywords
+                    # URL filter: If LLM generates URLs, extract keywords
                     if query:
                         if query.startswith("http://") or query.startswith("https://"):
-                            # URL → versuche Keywords zu extrahieren
+                            # URL → try to extract keywords
                             import re
-                            # Extrahiere q= Parameter oder path segments
+                            # Extract q= parameter or path segments
                             if "q=" in query:
                                 match = re.search(r'[?&]q=([^&]+)', query)
                                 if match:
@@ -183,7 +181,7 @@ def parse_think_response(response: str) -> tuple[str, list[str]]:
                                     query = re.sub(r'%[0-9A-Fa-f]{2}', ' ', query)  # URL decode cleanup
                             else:
                                 continue  # Skip non-search URLs
-                        # Entferne URL-artige Patterns die durchrutschen
+                        # Remove URL-like patterns that slip through
                         if "://" in query or query.startswith("site:"):
                             continue
                         if query and len(query) > 3:
