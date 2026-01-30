@@ -29,15 +29,15 @@
 
 <blockquote>
 
-Perplexity, OpenAI und Google liefern Zusammenfassungen. Ich wollte Wahrheit.
+Perplexity, OpenAI and Google deliver summaries. I wanted truth.
 
-Also habe ich aufgehört zu warten und selbst gebaut. Der Camoufox-Scraper kommt durch Cloudflare, Bloomberg und Paywalls mit 0% Detection. Die rekursive Pipeline gibt Kontext weiter – jeder Recherchepunkt weiß, was die vorherigen gefunden haben. Die Claim Audits zwingen das Modell zur Selbstreflexion statt blindem Behaupten.
+So I stopped waiting and built it myself. The Camoufox scraper cuts through Cloudflare, Bloomberg and paywalls with 0% detection. The recursive pipeline passes context forward – each research point knows what the previous ones discovered. Claim Audits force the model into self-reflection instead of blind assertions.
 
-Das Ergebnis: 203.000 Zeichen akademische Tiefe für eine einzige Query. Kosten: $0.08. Das ist 92x günstiger als OpenAI o3 und qualitativ in einer anderen Liga.
+The result: 203,000 characters of academic depth for a single query. Cost: $0.08. That's 92x cheaper than OpenAI o3 and qualitatively in a different league.
 
-Das ist keine "Alternative" zu bestehenden Tools. Das ist der Beweis, dass ein Solo-Dev mit der richtigen Architektur die Milliarden-Konzerne bei dem schlagen kann, was eigentlich ihre Kernkompetenz sein sollte: tiefes, überprüfbares Wissen.
+This isn't an "alternative" to existing tools. This is proof that a solo dev with the right architecture can beat billion-dollar corporations at what should be their core competency: deep, verifiable knowledge.
 
-**Die Messlatte für Deep Research liegt ab heute genau hier.**
+**The bar for Deep Research is set right here.**
 
 *— Martin Gehrken, 30.01.2026*
 
