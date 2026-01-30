@@ -28,20 +28,19 @@
 ---
 
 <blockquote>
-<h3>The Benchmark</h3>
 
-<table>
-<tr><td><strong>203.000 Zeichen</strong></td><td>Academic Output für eine einzige Query</td></tr>
-<tr><td><strong>$0.08</strong></td><td>Kosten pro Deep Research Session</td></tr>
-<tr><td><strong>92x günstiger</strong></td><td>als OpenAI o3 Deep Research</td></tr>
-<tr><td><strong>0% Detection Rate</strong></td><td>Camoufox Scraper vs. Cloudflare, Bloomberg, Paywalls</td></tr>
-<tr><td><strong>Evidence Tables + Claim Audits</strong></td><td>Überprüfbare Fakten statt "Trust me bro"</td></tr>
-<tr><td><strong>Rekursive Tiefe</strong></td><td>Jeder Punkt recherchiert mit Wissen der vorherigen</td></tr>
-</table>
+Perplexity, OpenAI und Google liefern Zusammenfassungen. Ich wollte Wahrheit.
 
-<p><strong>OpenAI liefert einen Journalisten-Artikel. Lutum Veritas liefert ein Intelligence Dossier.</strong></p>
+Also habe ich aufgehört zu warten und selbst gebaut. Der Camoufox-Scraper kommt durch Cloudflare, Bloomberg und Paywalls mit 0% Detection. Die rekursive Pipeline gibt Kontext weiter – jeder Recherchepunkt weiß, was die vorherigen gefunden haben. Die Claim Audits zwingen das Modell zur Selbstreflexion statt blindem Behaupten.
 
-<p><em>Die Messlatte für Deep Research bis hin in den Akademischen Bereich liegt ab heute genau Hier in Veritas Research.</em></p>
+Das Ergebnis: 203.000 Zeichen akademische Tiefe für eine einzige Query. Kosten: $0.08. Das ist 92x günstiger als OpenAI o3 und qualitativ in einer anderen Liga.
+
+Das ist keine "Alternative" zu bestehenden Tools. Das ist der Beweis, dass ein Solo-Dev mit der richtigen Architektur die Milliarden-Konzerne bei dem schlagen kann, was eigentlich ihre Kernkompetenz sein sollte: tiefes, überprüfbares Wissen.
+
+**Die Messlatte für Deep Research liegt ab heute genau hier.**
+
+*— Martin Gehrken, 30.01.2026*
+
 </blockquote>
 
 ---
