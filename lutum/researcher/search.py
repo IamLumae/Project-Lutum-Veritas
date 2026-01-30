@@ -158,7 +158,9 @@ def _format_results_for_llm(search_results: dict[str, list[dict]]) -> str:
 
 
 # === LLM PROMPT (Query-Aware + Diversified) ===
-GET_INITIAL_DATA_PROMPT = """You select URLs from search results.
+# Split into SYSTEM + USER prompt like pick_urls.py
+
+PICK_URLS_SYSTEM_PROMPT = """You select URLs from search results.
 
 ═══════════════════════════════════════════════════════════════════
                     OUTPUT FORMAT (MANDATORY!)
@@ -199,33 +201,41 @@ SOURCE MIX (distribution for 10 URLs):
 
 **High quality:** GitHub repos, papers (arxiv), official docs, expert blogs
 **Medium quality:** Medium/Dev.to, Reddit (if substantial), Stack Overflow
-**Avoid:** Generic news sites, SEO spam, outdated content
+**Avoid:** Generic news sites, SEO spam, outdated content"""
 
----
+PICK_URLS_USER_PROMPT = """
+# CONTEXT
 
-ORIGINAL TASK:
+## User Task
 {user_message}
 
 {context_block}
 
-SEARCH RESULTS:
+---
+
+# SEARCH RESULTS
+
 {search_results}
 
 ---
 
+# TASK
+
+Select EXACTLY 10 URLs. NO ANALYSIS. NO EXPLANATION. ONLY URLS.
+
 CRITICAL: Start IMMEDIATELY with "=== SELECTED ===" - NO text before!
 
 === SELECTED ===
-url 1: https://example.com/1
-url 2: https://example.com/2
-url 3: https://example.com/3
-url 4: https://example.com/4
-url 5: https://example.com/5
-url 6: https://example.com/6
-url 7: https://example.com/7
-url 8: https://example.com/8
-url 9: https://example.com/9
-url 10: https://example.com/10
+url 1:
+url 2:
+url 3:
+url 4:
+url 5:
+url 6:
+url 7:
+url 8:
+url 9:
+url 10:
 """
 
 
@@ -261,14 +271,17 @@ IMPORTANT: Select URLs that provide NEW information, not the same again!
     else:
         context_block = ""
 
-    prompt = GET_INITIAL_DATA_PROMPT.format(
+    user_prompt = PICK_URLS_USER_PROMPT.format(
         user_message=user_message,
         search_results=search_results,
         context_block=context_block
     )
 
     result = call_chat_completion(
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {"role": "system", "content": PICK_URLS_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt}
+        ],
         model=get_work_model(),
         max_tokens=max_tokens,
         timeout=60
