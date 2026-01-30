@@ -1851,10 +1851,14 @@ async def research_academic(request: AcademicResearchRequest):
 
                 await asyncio.sleep(0.2)
 
+                # Count total dossiers across all areas
+                total_dossiers = sum(len(s.get('dossiers', [])) for s in all_bereichs_synthesen)
+
                 # DER MAGISCHE CALL - bekommt User-Frage + alle Bereichs-Synthesen
-                system_prompt, user_prompt = build_academic_conclusion_prompt(
+                system_prompt, user_prompt, conclusion_metrics = build_academic_conclusion_prompt(
                     user_query=user_query,
-                    bereichs_synthesen=all_bereichs_synthesen
+                    bereichs_synthesen=all_bereichs_synthesen,
+                    total_dossiers=total_dossiers,
                 )
 
                 # Academic Conclusion in Thread für non-blocking
@@ -1873,24 +1877,54 @@ async def research_academic(request: AcademicResearchRequest):
                 if not academic_conclusion:
                     academic_conclusion = "# Conclusion\n\nConclusion synthesis failed." if lang == "en" else "# Conclusion\n\nConclusion-Synthese fehlgeschlagen."
 
-                # === FINAL DOCUMENT ZUSAMMENBAUEN ===
+                # === BUILD IMPACT STATEMENT ===
+                if lang == "en":
+                    impact_statement = f"""> **🔮 I have analyzed {conclusion_metrics['total_sources']} sources** and read **{conclusion_metrics['total_synthese_chars']:,} characters** of synthesized knowledge.
+> I have processed **{conclusion_metrics['total_dossiers']} dossiers** from worker AIs across **{conclusion_metrics['total_areas']} independent research areas**.
+> This is what I found:
+
+"""
+                else:
+                    impact_statement = f"""> **🔮 Ich habe {conclusion_metrics['total_sources']} Quellen analysiert** und **{conclusion_metrics['total_synthese_chars']:,} Zeichen** an synthetisiertem Wissen gelesen.
+> Ich habe **{conclusion_metrics['total_dossiers']} Dossiers** von Arbeits-KIs aus **{conclusion_metrics['total_areas']} unabhängigen Forschungsbereichen** verarbeitet.
+> Das ist was ich gefunden habe:
+
+"""
+
+                # === STRUCTURED DATA (not glued together anymore!) ===
+                # Each synthesis = separate collapsible block
+                # Conclusion = separate open block with orange background
+
+                syntheses_data = []
+                for i, s in enumerate(all_bereichs_synthesen, 1):
+                    syntheses_data.append({
+                        "index": i,
+                        "title": s['bereich_titel'],
+                        "content": s['synthese'],
+                        "sources_count": s.get('sources_count', 0),
+                        "dossiers_count": len(s.get('dossiers', []))
+                    })
+
+                conclusion_data = {
+                    "impact_statement": impact_statement,
+                    "content": academic_conclusion,
+                    "title": "🔮 CROSS-CONNECTIONS & CONCLUSION" if lang == "en" else "🔮 QUERVERBINDUNGEN & CONCLUSION"
+                }
+
+                # Legacy: Still build final_document for backwards compatibility
                 final_document = f"# {user_query[:100]}{'...' if len(user_query) > 100 else ''}\n\n"
                 final_document += "---\n\n"
-
-                # Alle Bereichs-Synthesen einfügen mit klaren Trennern
                 for i, s in enumerate(all_bereichs_synthesen, 1):
                     final_document += f"\n{'═' * 60}\n"
                     final_document += f"# 📚 BEREICH {i}/{len(all_bereichs_synthesen)}: {s['bereich_titel']}\n"
                     final_document += f"{'═' * 60}\n\n"
                     final_document += s['synthese']
                     final_document += "\n\n"
-
-                # Klarer Trenner vor Conclusion
                 final_document += f"\n{'█' * 60}\n"
                 final_document += "# 🔮 CROSS-CONNECTIONS & CONCLUSION\n" if lang == "en" else "# 🔮 QUERVERBINDUNGEN & CONCLUSION\n"
                 final_document += f"{'█' * 60}\n\n"
+                final_document += impact_statement
                 final_document += academic_conclusion
-                # Quellenverzeichnis wird vom Frontend aus source_registry gerendert - NICHT hier!
 
             else:
                 final_document = "No areas successfully researched." if lang == "en" else "Keine Bereiche erfolgreich recherchiert."
@@ -1907,12 +1941,18 @@ async def research_academic(request: AcademicResearchRequest):
             yield json.dumps({
                 "type": "done",
                 "data": {
+                    # NEW: Structured data for collapsible UI
+                    "syntheses": syntheses_data if all_bereichs_synthesen else [],
+                    "conclusion": conclusion_data if all_bereichs_synthesen else None,
+                    # LEGACY: Still include for backwards compatibility
                     "final_document": final_document,
+                    # Metadata
                     "total_points": global_point_index,
                     "total_sources": len(source_registry),
                     "total_bereiche": total_bereiche,
                     "duration_seconds": duration,
                     "source_registry": source_registry,
+                    "conclusion_metrics": conclusion_metrics if all_bereichs_synthesen else None,
                     "error": None
                 }
             }) + "\n"

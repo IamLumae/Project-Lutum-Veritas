@@ -111,9 +111,38 @@ export interface DeepResearchResponse {
   error: string | null;
 }
 
+/** Single Synthesis Block (collapsible in UI) */
+export interface SynthesisBlock {
+  index: number;
+  title: string;
+  content: string;
+  sources_count: number;
+  dossiers_count: number;
+}
+
+/** Conclusion Block (always open, orange background) */
+export interface ConclusionBlock {
+  impact_statement: string;
+  content: string;
+  title: string;
+}
+
+/** Conclusion Metrics */
+export interface ConclusionMetrics {
+  total_sources: number;
+  total_synthese_chars: number;
+  total_dossiers: number;
+  total_raw_chars: number;
+  total_areas: number;
+}
+
 /** Academic Research Response (erweitert Deep Research) */
 export interface AcademicResearchResponse extends DeepResearchResponse {
   total_bereiche: number;
+  // NEW: Structured data for collapsible UI
+  syntheses?: SynthesisBlock[];
+  conclusion?: ConclusionBlock;
+  conclusion_metrics?: ConclusionMetrics;
 }
 
 /** Event wenn ein Bereich startet (Academic Mode) */

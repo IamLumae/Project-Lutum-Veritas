@@ -106,7 +106,7 @@ export interface Message {
   url?: string;
   loading?: boolean;
   /** Spezial-Typ für verschiedene Anzeigen */
-  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry";
+  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry" | "synthesis" | "conclusion";
   /** URLs für sources-Typ */
   sources?: string[];
   /** Source Registry für klickbare Citations {1: "url1", 2: "url2"} */
@@ -125,6 +125,23 @@ export interface Message {
   skipReason?: string;
   /** Geschätzte Minuten für Synthesis */
   estimatedMinutes?: number;
+  /** Synthesis-Titel für collapsible Synthese-Blöcke */
+  synthesisTitle?: string;
+  /** Synthesis-Index (1, 2, 3...) */
+  synthesisIndex?: number;
+  /** Total Synthesen */
+  totalSyntheses?: number;
+  /** Sources Count für Synthese */
+  synthesisSourcesCount?: number;
+  /** Impact Statement für Conclusion */
+  impactStatement?: string;
+  /** Conclusion Metrics */
+  conclusionMetrics?: {
+    totalSources: number;
+    totalSyntheseChars: number;
+    totalDossiers: number;
+    totalAreas: number;
+  };
 }
 
 /**
@@ -277,6 +294,101 @@ function SourcesRegistryBox({ registry, language }: { registry: Record<number, s
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * SynthesisBlock - Collapsible block for area syntheses.
+ * Purple/violet theme, collapsed by default.
+ */
+function SynthesisBlock({
+  title,
+  content,
+  index,
+  sourcesCount,
+  language
+}: {
+  title: string;
+  content: string;
+  index: number;
+  sourcesCount: number;
+  language: Language;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="rounded-xl border-2 border-purple-500/40 overflow-hidden bg-gradient-to-br from-purple-500/10 to-purple-600/5 w-full mb-3">
+      {/* Header - Always visible */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-purple-500/15 hover:bg-purple-500/25 transition-all duration-200"
+      >
+        <span className="flex items-center gap-3 text-sm font-bold text-purple-300">
+          <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-purple-500/30 text-purple-200 text-sm font-bold rounded-lg border border-purple-500/40">
+            {index}
+          </span>
+          <span className="truncate">{title}</span>
+        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-purple-400 hidden sm:block">
+            {sourcesCount} {language === 'de' ? 'Quellen' : 'sources'}
+          </span>
+          <span className={`text-purple-400 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}>
+            ▼
+          </span>
+        </div>
+      </button>
+
+      {/* Content - Expandable */}
+      {expanded && (
+        <div className="border-t border-purple-500/20 p-4 max-h-[600px] overflow-y-auto">
+          <MarkdownContent content={content} isUser={false} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ConclusionBlock - The final conclusion with orange/fire theme.
+ * Always expanded, prominent styling.
+ */
+function ConclusionBlock({
+  title,
+  content,
+  impactStatement,
+}: {
+  title: string;
+  content: string;
+  impactStatement: string;
+  metrics?: {
+    totalSources: number;
+    totalSyntheseChars: number;
+    totalDossiers: number;
+    totalAreas: number;
+  };
+  language: Language;
+}) {
+  return (
+    <div className="rounded-xl border-2 border-orange-500/50 overflow-hidden bg-gradient-to-br from-orange-500/15 to-red-600/10 w-full">
+      {/* Header - Fire theme */}
+      <div className="px-4 py-3 bg-gradient-to-r from-orange-500/25 to-red-500/20 border-b border-orange-500/30">
+        <span className="flex items-center gap-3 text-base font-bold text-orange-300">
+          <span className="text-xl">🔮</span>
+          {title}
+        </span>
+      </div>
+
+      {/* Impact Statement - Highlighted */}
+      <div className="px-4 py-3 bg-orange-500/10 border-b border-orange-500/20">
+        <MarkdownContent content={impactStatement} isUser={false} />
+      </div>
+
+      {/* Main Content */}
+      <div className="p-4">
+        <MarkdownContent content={content} isUser={false} />
+      </div>
     </div>
   );
 }
@@ -759,6 +871,24 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
               ) : msg.type === "sources_registry" && msg.sourceRegistry ? (
                 /* Sources Registry Box - Ausklappbares Quellenverzeichnis */
                 <SourcesRegistryBox registry={msg.sourceRegistry} language={language} />
+              ) : msg.type === "synthesis" && msg.synthesisTitle ? (
+                /* Synthesis Block - Collapsible area synthesis (purple, collapsed) */
+                <SynthesisBlock
+                  title={msg.synthesisTitle}
+                  content={msg.content}
+                  index={msg.synthesisIndex || 1}
+                  sourcesCount={msg.synthesisSourcesCount || 0}
+                  language={language}
+                />
+              ) : msg.type === "conclusion" ? (
+                /* Conclusion Block - Final conclusion (orange, always open) */
+                <ConclusionBlock
+                  title={language === 'de' ? '🔮 QUERVERBINDUNGEN & CONCLUSION' : '🔮 CROSS-CONNECTIONS & CONCLUSION'}
+                  content={msg.content}
+                  impactStatement={msg.impactStatement || ''}
+                  metrics={msg.conclusionMetrics}
+                  language={language}
+                />
               ) : (
                 <>
                   {/* Markdown Content - mit ID für PDF Export wenn finaler Report */}

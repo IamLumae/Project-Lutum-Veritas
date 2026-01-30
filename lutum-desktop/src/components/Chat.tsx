@@ -778,14 +778,52 @@ export function Chat() {
       );
 
       // Ergebnis verarbeiten
-      if (result?.final_document) {
-        const finalMsg: Message = {
+      if (result?.syntheses && result?.conclusion) {
+        // NEW: Structured rendering - each synthesis as collapsible block
+        for (const synthesis of result.syntheses) {
+          const synthesisMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: synthesis.content,
+            timestamp: new Date().toISOString(),
+            type: "synthesis",
+            synthesisTitle: synthesis.title,
+            synthesisIndex: synthesis.index,
+            totalSyntheses: result.syntheses.length,
+            synthesisSourcesCount: synthesis.sources_count,
+          };
+          addMessage(sessionId, synthesisMsg);
+        }
+
+        // Conclusion - always open, orange theme
+        const conclusionMsg: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: result.final_document,
+          content: result.conclusion.content,
           timestamp: new Date().toISOString(),
+          type: "conclusion",
+          impactStatement: result.conclusion.impact_statement,
+          conclusionMetrics: result.conclusion_metrics ? {
+            totalSources: result.conclusion_metrics.total_sources,
+            totalSyntheseChars: result.conclusion_metrics.total_synthese_chars,
+            totalDossiers: result.conclusion_metrics.total_dossiers,
+            totalAreas: result.conclusion_metrics.total_areas,
+          } : undefined,
         };
-        addMessage(sessionId, finalMsg);
+        addMessage(sessionId, conclusionMsg);
+
+        // Source Registry am Ende
+        if (result.source_registry && Object.keys(result.source_registry).length > 0) {
+          const registryMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "",
+            timestamp: new Date().toISOString(),
+            type: "sources_registry",
+            sourceRegistry: result.source_registry,
+          };
+          addMessage(sessionId, registryMsg);
+        }
 
         // Summary
         const summaryMsg: Message = {
@@ -798,7 +836,16 @@ export function Chat() {
         };
         addMessage(sessionId, summaryMsg);
 
-        // Source Registry wird NICHT mehr separat angezeigt - ist jetzt im final_document eingebaut
+        updateSession(sessionId, { phase: "done" });
+      } else if (result?.final_document) {
+        // LEGACY: Fallback to old behavior if no structured data
+        const finalMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: result.final_document,
+          timestamp: new Date().toISOString(),
+        };
+        addMessage(sessionId, finalMsg);
 
         updateSession(sessionId, { phase: "done" });
       } else if (result?.error) {

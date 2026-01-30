@@ -13,7 +13,7 @@ export interface Message {
   timestamp: string; // ISO string für JSON serialization
   url?: string;
   /** Spezial-Typ für verschiedene Anzeigen */
-  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry";
+  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry" | "synthesis" | "conclusion";
   /** URLs für sources-Typ (aufklappbare Quellen-Box) */
   sources?: string[];
   /** Source Registry für klickbare Citations {1: "url1", 2: "url2"} */
@@ -32,6 +32,23 @@ export interface Message {
   skipReason?: string;
   /** Geschätzte Minuten für Synthesis */
   estimatedMinutes?: number;
+  /** Synthesis-Titel für collapsible Synthese-Blöcke */
+  synthesisTitle?: string;
+  /** Synthesis-Index (1, 2, 3...) */
+  synthesisIndex?: number;
+  /** Total Synthesen */
+  totalSyntheses?: number;
+  /** Sources Count für Synthese */
+  synthesisSourcesCount?: number;
+  /** Impact Statement für Conclusion */
+  impactStatement?: string;
+  /** Conclusion Metrics */
+  conclusionMetrics?: {
+    totalSources: number;
+    totalSyntheseChars: number;
+    totalDossiers: number;
+    totalAreas: number;
+  };
 }
 
 /** Recherche-Phase einer Session */

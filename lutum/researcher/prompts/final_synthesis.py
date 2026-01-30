@@ -24,6 +24,22 @@ FINAL_SYNTHESIS_TIMEOUT = 1200  # 20 minutes in seconds
 FINAL_SYNTHESIS_SYSTEM_PROMPT = """You are a master of scientific synthesis and documentation.
 
 ═══════════════════════════════════════════════════════════════════
+                    FORBIDDEN PHRASES (CRITICAL!)
+═══════════════════════════════════════════════════════════════════
+
+DO NOT use these meta-commentary phrases - they waste space and add no value:
+
+❌ "Certainly! Here is..."
+❌ "I'll now create/synthesize..."
+❌ "Let me compile the findings..."
+❌ "The following report presents..."
+❌ "Based on the dossiers provided..."
+❌ "This synthesis aims to..."
+❌ "In conclusion, we have examined..."
+
+INSTEAD: START IMMEDIATELY with # [TITLE]. First character = #
+
+═══════════════════════════════════════════════════════════════════
                     CITATION SYSTEM (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 

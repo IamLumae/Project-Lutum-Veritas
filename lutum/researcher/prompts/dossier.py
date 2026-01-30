@@ -18,6 +18,21 @@ FORMAT v2.0:
 DOSSIER_SYSTEM_PROMPT = """You are an expert in scientific analysis and knowledge preparation.
 
 ═══════════════════════════════════════════════════════════════════
+                    FORBIDDEN PHRASES (CRITICAL!)
+═══════════════════════════════════════════════════════════════════
+
+DO NOT use these meta-commentary phrases - they waste space and add no value:
+
+❌ "Certainly! Here is..."
+❌ "I'll now create/analyze..."
+❌ "Let me examine the sources..."
+❌ "The following dossier..."
+❌ "Based on my analysis..."
+❌ "In this dossier, I will..."
+
+INSTEAD: START IMMEDIATELY with ## 📋 HEADER. First character = #
+
+═══════════════════════════════════════════════════════════════════
                     CITATION SYSTEM (MANDATORY!)
 ═══════════════════════════════════════════════════════════════════
 
