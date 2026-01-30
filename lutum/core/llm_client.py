@@ -2,6 +2,7 @@
 LLM Client Helpers
 ==================
 Zentrale Helpers für API-Calls + Error Parsing.
+Provider-aware: Handles OpenAI, Anthropic, Google, HuggingFace formats.
 """
 
 from __future__ import annotations
@@ -42,6 +43,99 @@ def _extract_error_message(payload: Any, status_code: Optional[int] = None) -> s
     return message
 
 
+def _build_request_body(
+    messages: list[dict[str, str]],
+    model: str,
+    max_tokens: int,
+    provider: str
+) -> dict:
+    """
+    Builds provider-specific request body.
+
+    Anthropic: System prompt as top-level param, not in messages.
+    Google: Lower temperature for consistent output.
+    OpenAI/OpenRouter/HuggingFace: Standard format.
+    """
+
+    if provider == "anthropic":
+        # Anthropic: Extract system prompt from messages, put it top-level
+        system_prompt = None
+        filtered_messages = []
+
+        for msg in messages:
+            if msg.get("role") == "system":
+                system_prompt = msg.get("content", "")
+            else:
+                filtered_messages.append(msg)
+
+        body = {
+            "model": model,
+            "messages": filtered_messages,
+            "max_tokens": max_tokens,
+        }
+
+        if system_prompt:
+            body["system"] = system_prompt
+
+        return body
+
+    elif provider == "google":
+        # Google Gemini: Use lower temperature for consistent output
+        return {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.3,  # Lower temp for consistent structured output
+        }
+
+    else:
+        # OpenAI / OpenRouter / HuggingFace: Standard format
+        return {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.3,  # Consistent output
+        }
+
+
+def _parse_response(result: dict, provider: str) -> Optional[str]:
+    """
+    Parses provider-specific response format.
+
+    Anthropic: content[0].text
+    Others: choices[0].message.content
+    """
+
+    if provider == "anthropic":
+        # Anthropic format: {"content": [{"type": "text", "text": "..."}]}
+        content_blocks = result.get("content", [])
+        if content_blocks and len(content_blocks) > 0:
+            first_block = content_blocks[0]
+            if isinstance(first_block, dict):
+                return first_block.get("text")
+            return str(first_block)
+        return None
+
+    else:
+        # OpenAI format: {"choices": [{"message": {"content": "..."}}]}
+        if "choices" not in result:
+            return None
+        choice = result["choices"][0]
+        message = choice.get("message", {})
+        return message.get("content")
+
+
+def _get_finish_reason(result: dict, provider: str) -> str:
+    """Gets finish reason from provider-specific response."""
+
+    if provider == "anthropic":
+        return result.get("stop_reason", "unknown")
+    else:
+        if "choices" in result and len(result["choices"]) > 0:
+            return result["choices"][0].get("finish_reason", "unknown")
+        return "unknown"
+
+
 def call_chat_completion(
     messages: list[dict[str, str]],
     model: str,
@@ -50,19 +144,22 @@ def call_chat_completion(
     base_url: Optional[str] = None
 ) -> LLMCallResult:
     """
-    Führt einen Chat-Completion Call durch (OpenAI-kompatibles Format).
+    Führt einen Chat-Completion Call durch.
+    Provider-aware: Handles different API formats automatically.
     """
     url = base_url or get_api_base_url()
+    provider = get_provider()
+
+    # Build provider-specific request body
+    request_body = _build_request_body(messages, model, max_tokens, provider)
+
+    logger.debug(f"[LLM] Provider: {provider}, Model: {model}, max_tokens: {max_tokens}")
 
     try:
         response = requests.post(
             url,
             headers=get_api_headers(),
-            json={
-                "model": model,
-                "messages": messages,
-                "max_tokens": max_tokens
-            },
+            json=request_body,
             timeout=timeout
         )
 
@@ -72,22 +169,20 @@ def call_chat_completion(
             except ValueError:
                 payload = response.text
             error_message = _extract_error_message(payload, response.status_code)
-            logger.error(f"LLM API error ({get_provider()}): {error_message}")
+            logger.error(f"LLM API error ({provider}): {error_message}")
             return LLMCallResult(content=None, error=error_message, raw=None)
 
         result = response.json()
-        if "choices" not in result:
-            error_message = _extract_error_message(result, response.status_code)
-            logger.error(f"LLM response missing choices: {error_message}")
-            return LLMCallResult(content=None, error=error_message, raw=result)
 
-        choice = result["choices"][0]
-        message = choice.get("message", {})
-        content = message.get("content")
+        # Parse response using provider-specific logic
+        content = _parse_response(result, provider)
+        finish_reason = _get_finish_reason(result, provider)
+
+        # ALWAYS log finish_reason to debug early stops
+        logger.info(f"[LLM] provider={provider}, finish_reason={finish_reason}, content_len={len(content) if content else 0}, model={model}")
+
         if content is None or not str(content).strip():
-            finish_reason = choice.get("finish_reason", "unknown")
-            refusal = message.get("refusal", "none")
-            logger.warning(f"LLM returned empty content (finish_reason={finish_reason}, refusal={refusal}, model={model})")
+            logger.warning(f"LLM returned empty content (provider={provider}, finish_reason={finish_reason}, model={model})")
 
         return LLMCallResult(content=content, error=None, raw=result)
 

@@ -41,10 +41,10 @@ export function Chat() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Settings State (Lifted for UI Controls)
-  const [modelSize, setModelSize] = useState<'small' | 'large'>('small');
-  const [academicMode, setAcademicMode] = useState(false);
-  const [language, setLanguage] = useState<Language>('de');
+  // Settings State (Lifted for UI Controls) - Init directly from settings to avoid race condition
+  const [modelSize, setModelSize] = useState<'small' | 'large'>(() => loadSettings().modelSize);
+  const [academicMode, setAcademicMode] = useState(() => loadSettings().academicMode);
+  const [language, setLanguage] = useState<Language>(() => loadSettings().language);
 
   // Init Settings State
   useEffect(() => {
@@ -407,11 +407,17 @@ export function Chat() {
   }, []);
 
   // Check backend connection - fast polling until connected, then slow
+  // Skip health checks during active research to prevent "offline" flicker
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     let wasConnected = false;
 
     const poll = async () => {
+      // Skip health check during active research - we know backend is running if we're getting events
+      if (loading) {
+        return;
+      }
+
       const online = await checkHealth();
 
       if (online !== wasConnected) {
@@ -429,7 +435,7 @@ export function Chat() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [checkHealth]);
+  }, [checkHealth, loading]);
 
   // Save sessions on change
   useEffect(() => {
@@ -867,18 +873,8 @@ export function Chat() {
         };
         addMessage(sessionId, conclusionMsg);
 
-        // Source Registry am Ende
-        if (result.source_registry && Object.keys(result.source_registry).length > 0) {
-          const registryMsg: Message = {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: "",
-            timestamp: new Date().toISOString(),
-            type: "sources_registry",
-            sourceRegistry: result.source_registry,
-          };
-          addMessage(sessionId, registryMsg);
-        }
+        // Source Registry wird inline im Report angezeigt (ReportRenderer)
+        // Keine separate Message nötig - verhindert Doppel-Anzeige
 
         // Summary
         const summaryMsg: Message = {
@@ -1006,18 +1002,8 @@ export function Chat() {
       };
       addMessage(sessionId, summaryMsg);
 
-      // Sources Registry Message - Ausklappbares Quellenverzeichnis
-      if (result.source_registry && Object.keys(result.source_registry).length > 0) {
-        const sourcesMsg: Message = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: "", // Content wird nicht angezeigt, nur die Registry Box
-          timestamp: new Date().toISOString(),
-          type: "sources_registry",
-          sourceRegistry: result.source_registry,
-        };
-        addMessage(sessionId, sourcesMsg);
-      }
+      // Source Registry wird inline im Report angezeigt (ReportRenderer)
+      // Keine separate Message nötig - verhindert Doppel-Anzeige
 
       updateSession(sessionId, { phase: "done" });
     } else if (result?.error) {

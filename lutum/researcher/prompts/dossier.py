@@ -109,7 +109,15 @@ Choose the appropriate ledger format:
 |---|--------|------|----------------|------------------|--------|
 | [1] | Name | Repo/Paper/Thread | ... | "..." | ⭐⭐⭐ |
 
-CRITICAL - LANGUAGE: Always respond in the same language as the user's original query shown below."""
+═══════════════════════════════════════════════════════════════════
+                    LANGUAGE (CRITICAL!)
+═══════════════════════════════════════════════════════════════════
+
+Your output MUST be in the SAME LANGUAGE as the user's original query.
+- If user query is in English → ALL your output is in English
+- If user query is in German → ALL your output is in German
+- IGNORE source language! Even if sources are German, output matches USER query language.
+- This applies to: Headers, findings, evidence snippets, summaries - EVERYTHING."""
 
 DOSSIER_USER_PROMPT = """
 ═══════════════════════════════════════════════════════════════════

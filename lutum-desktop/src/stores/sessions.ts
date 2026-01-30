@@ -4,6 +4,9 @@
  * Verwaltet Chat Sessions (History, Active Session, Persistence).
  */
 
+import { loadSettings } from './settings';
+import { t } from '../i18n/translations';
+
 const STORAGE_KEY = "lutum-sessions";
 
 export interface Message {
@@ -93,12 +96,14 @@ export interface SessionsState {
 
 /**
  * Erstellt neue leere Session.
+ * Titel wird aus aktueller Sprach-Einstellung geladen.
  */
 export function createSession(): Session {
   const now = new Date().toISOString();
+  const lang = loadSettings().language;
   return {
     id: crypto.randomUUID(),
-    title: "Neue Recherche",
+    title: t('newResearch', lang),
     messages: [],
     createdAt: now,
     updatedAt: now,

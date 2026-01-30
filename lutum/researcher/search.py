@@ -170,6 +170,7 @@ RULE 1: NO ANALYSIS. NO EXPLANATION. ONLY URLS.
 RULE 2: Start IMMEDIATELY with "=== SELECTED ===" - NO text before!
 RULE 3: Each line: "url N: https://..." - nothing else.
 RULE 4: EXACTLY 10 URLs. Not 3, not 5, not 9 - exactly 10.
+RULE 5: The number of items in the user query is IRRELEVANT. If user asks about "3 tools" you still pick 10 URLs. If user asks about "5 companies" you still pick 10 URLs. ALWAYS 10.
 
 ═══════════════════════════════════════════════════════════════════
                     QUERY AWARENESS (MANDATORY!)
@@ -277,6 +278,11 @@ IMPORTANT: Select URLs that provide NEW information, not the same again!
         context_block=context_block
     )
 
+    # DEBUG: Log FULL prompts sent to LLM
+    logger.info(f"[SEARCH] ===== SYSTEM PROMPT =====\n{PICK_URLS_SYSTEM_PROMPT}")
+    logger.info(f"[SEARCH] ===== USER PROMPT (first 3000 chars) =====\n{user_prompt[:3000]}")
+    logger.info(f"[SEARCH] ===== USER PROMPT LENGTH: {len(user_prompt)} chars =====")
+
     result = call_chat_completion(
         messages=[
             {"role": "system", "content": PICK_URLS_SYSTEM_PROMPT},
@@ -297,7 +303,8 @@ IMPORTANT: Select URLs that provide NEW information, not the same again!
 
     answer = str(result.content)
     logger.info(f"LLM picked URLs: {len(answer)} chars response")
-    logger.info(f"[SEARCH] RAW LLM RESPONSE:\n{answer}")
+    logger.info(f"[SEARCH] ===== FULL LLM RESPONSE =====\n{answer}")
+    logger.info(f"[SEARCH] ===== RAW API RESULT =====\n{result.raw}")
     return answer
 
 
@@ -378,6 +385,10 @@ async def get_initial_data(
 
         # Format for LLM
         formatted_results = _format_results_for_llm(search_results)
+
+        # DEBUG: Log what we're sending to LLM
+        logger.info(f"[SEARCH] Formatted results length: {len(formatted_results)} chars")
+        logger.info(f"[SEARCH] First 2000 chars of search results:\n{formatted_results[:2000]}")
 
         # LLM picks URLs (with context if available)
         llm_response = _call_llm_pick_urls(user_message, formatted_results, previous_learnings)
