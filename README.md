@@ -20,7 +20,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"/>
-  <img src="https://img.shields.io/badge/Version-1.2.1-green.svg" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.2.4-green.svg" alt="Version"/>
   <img src="https://img.shields.io/badge/Platform-Windows-lightgrey.svg" alt="Platform"/>
   <img src="https://img.shields.io/badge/Python-3.11+-yellow.svg" alt="Python"/>
 </p>
@@ -45,19 +45,14 @@ This isn't an "alternative" to existing tools. This is proof that a solo dev wit
 
 ---
 
-## Screenshots
+## Demo
 
 <p align="center">
-  <img src="assets/veritas.png" alt="Main Interface" width="700"/>
+  <img src="assets/lutum-demo.gif" alt="Lutum Veritas Demo - Deep Research in Action" width="800"/>
 </p>
 
 <p align="center">
-  <img src="assets/Screenshot_22.png" alt="Research Output" width="700"/>
-</p>
-
-<p align="center">
-  <img src="assets/Screenshot_23.png" alt="Settings" width="400"/>
-  <img src="assets/Screenshot_24.png" alt="PDF Export" width="400"/>
+  <em>Full Deep Research workflow: Query → Clarification → Plan → Research → Final Report</em>
 </p>
 
 ---
@@ -141,7 +136,7 @@ Powered by **Camoufox** - a hardened Firefox fork that bypasses:
 
 **Requirements:** Python 3.11+ installed ([python.org](https://python.org/downloads))
 
-1. Download `Lutum Veritas_1.2.1_x64-setup.exe` from [Releases](../../releases)
+1. Download `Lutum Veritas_1.2.4_x64-setup.exe` from [Releases](../../releases)
 2. Run the installer
    - If Python is not found, the installer will prompt you to install it
    - Dependencies are installed automatically via pip
@@ -363,7 +358,7 @@ Need to use Lutum Veritas without AGPL obligations? Commercial licenses are avai
 
 ## Security
 
-**v1.2.1 Installer:**
+**v1.2.4 Installer:**
 - **VirusTotal**: [0/67 detections](https://www.virustotal.com/gui/file/eff7c950df184089879701bd0e65435612e022b9e81ae041df79a53e24bfb788)
 - **SHA256**: `eff7c950df184089879701bd0e65435612e022b9e81ae041df79a53e24bfb788`
 
