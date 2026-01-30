@@ -27,6 +27,25 @@
 
 ---
 
+<blockquote>
+<h3>The Benchmark</h3>
+
+<table>
+<tr><td><strong>203.000 Zeichen</strong></td><td>Academic Output für eine einzige Query</td></tr>
+<tr><td><strong>$0.08</strong></td><td>Kosten pro Deep Research Session</td></tr>
+<tr><td><strong>92x günstiger</strong></td><td>als OpenAI o3 Deep Research</td></tr>
+<tr><td><strong>0% Detection Rate</strong></td><td>Camoufox Scraper vs. Cloudflare, Bloomberg, Paywalls</td></tr>
+<tr><td><strong>Evidence Tables + Claim Audits</strong></td><td>Überprüfbare Fakten statt "Trust me bro"</td></tr>
+<tr><td><strong>Rekursive Tiefe</strong></td><td>Jeder Punkt recherchiert mit Wissen der vorherigen</td></tr>
+</table>
+
+<p><strong>OpenAI liefert einen Journalisten-Artikel. Lutum Veritas liefert ein Intelligence Dossier.</strong></p>
+
+<p><em>Die Messlatte für Deep Research bis hin in den Akademischen Bereich liegt ab heute genau Hier in Veritas Research.</em></p>
+</blockquote>
+
+---
+
 ## What is Lutum Veritas?
 
 **Lutum Veritas** is a self-hosted Deep Research Engine that transforms any question into a comprehensive research document. Unlike Perplexity, ChatGPT, or Google's AI Overview, you bring your own API key and everything runs locally.
@@ -64,21 +83,24 @@ Your Question
 │     Cross-reference all findings into one document  │
 └─────────────────────────────────────────────────────┘
      ↓
-📄 Comprehensive Report (3000+ words)
+📄 Comprehensive Report (5.000-10.000+ words)
 ```
 
-### 🎓 Academic Mode (NEW!)
+### 🎓 Academic Mode
 
 Hierarchical research with autonomous areas:
 - **Parallel Processing**: Research areas independently
 - **Meta-Synthesis**: Find cross-connections between areas
 - **Toulmin Argumentation**: Structured academic reasoning
 - **Evidence Grading**: Rate source quality (Level I-VII)
+- **Claim Audit Tables**: Confidence ratings for every claim
+- **200.000+ character outputs**: Full academic depth, no shortcuts
 
 ### 💻 Desktop App Features
 
 | Feature | Description |
 |---------|-------------|
+| **One-Click Install** | Single installer, no separate backend needed |
 | **Live Progress** | Watch research happen in real-time |
 | **Session Management** | Save, rename, delete research sessions |
 | **Source Boxes** | Expandable boxes showing all scraped URLs |
@@ -93,7 +115,7 @@ Powered by **Camoufox** - a hardened Firefox fork that bypasses:
 - Cloudflare
 - DataDome
 - PerimeterX
-- Most anti-bot systems
+- Bloomberg, TCGPlayer, and most anti-bot systems
 
 ---
 
@@ -101,14 +123,17 @@ Powered by **Camoufox** - a hardened Firefox fork that bypasses:
 
 ### Option A: Download Installer (Recommended)
 
-1. Download from [Releases](../../releases):
-   - `Lutum Veritas_1.2.1_x64-setup.exe` (Installer)
-   - `lutum-backend.exe` (Backend Server)
+**Requirements:** Python 3.11+ installed ([python.org](https://python.org/downloads))
 
-2. Install the desktop app
-3. Run `lutum-backend.exe` (keep it running)
-4. Launch Lutum Veritas
-5. Enter your [OpenRouter API Key](https://openrouter.ai/keys) in Settings
+1. Download `Lutum Veritas_1.2.1_x64-setup.exe` from [Releases](../../releases)
+2. Run the installer
+   - If Python is not found, the installer will prompt you to install it
+   - Dependencies are installed automatically via pip
+3. Launch **Lutum Veritas** from your Start Menu
+4. Enter your [OpenRouter API Key](https://openrouter.ai/keys) in Settings
+5. Start researching!
+
+> **Note:** The backend starts automatically when you open the app. No separate process to manage.
 
 ### Option B: Build from Source
 
@@ -137,14 +162,13 @@ npm run tauri dev
 
 ## Quick Start
 
-1. **Start Backend** - Run `lutum-backend.exe` or `python main.py`
-2. **Launch App** - Open Lutum Veritas
-3. **Enter API Key** - Settings → OpenRouter API Key
-4. **Ask Anything** - Type your research question
-5. **Answer Clarifications** - Help the AI understand your needs
-6. **Review Plan** - Approve or modify the research plan
-7. **Click "Let's Go"** - Watch the magic happen
-8. **Export** - Download your research as MD or PDF
+1. **Launch App** - Open Lutum Veritas (backend starts automatically)
+2. **Enter API Key** - Settings → OpenRouter API Key
+3. **Ask Anything** - Type your research question
+4. **Answer Clarifications** - Help the AI understand your needs
+5. **Review Plan** - Approve or modify the research plan
+6. **Click "Let's Go"** - Watch the magic happen
+7. **Export** - Download your research as MD or PDF
 
 ---
 
@@ -157,6 +181,7 @@ npm run tauri dev
 │                    LUTUM VERITAS DESKTOP                     │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │              Tauri Shell (Rust + WebView)              │  │
+│  │         Auto-starts Python backend on launch           │  │
 │  │  ┌─────────────────────────────────────────────────┐  │  │
 │  │  │           React Frontend (TypeScript)           │  │  │
 │  │  │  • Chat Interface     • Session Management      │  │  │
@@ -194,7 +219,7 @@ All models accessed via [OpenRouter](https://openrouter.ai) - you only need one 
 | Component | Technology |
 |-----------|------------|
 | **Desktop Shell** | Tauri 2.0 (Rust) |
-| **Frontend** | React 18 + TypeScript + Tailwind CSS |
+| **Frontend** | React 19 + TypeScript + Tailwind CSS |
 | **Backend** | FastAPI (Python 3.11) |
 | **Scraper** | Camoufox (Hardened Firefox) |
 | **LLMs** | OpenRouter (Gemini, Qwen, Claude, etc.) |
@@ -215,11 +240,13 @@ lutum-veritas/
 │   └── routes/
 │       └── research.py         # Research pipeline orchestrator
 ├── lutum-desktop/              # Tauri desktop app
-│   └── src/
-│       ├── components/         # React components
-│       ├── hooks/              # useBackend API hook
-│       └── stores/             # Session state management
-├── dist/                       # Pre-built binaries
+│   ├── src/
+│   │   ├── components/         # React components
+│   │   ├── hooks/              # useBackend API hook
+│   │   └── stores/             # Session state management
+│   └── src-tauri/
+│       ├── src/lib.rs          # Auto-start backend logic
+│       └── nsis-hooks.nsh      # Installer: Python check + pip install
 ├── LICENSE                     # AGPL-3.0
 ├── NOTICE                      # Copyright & commercial licensing
 └── README.md                   # You are here
@@ -315,18 +342,6 @@ This means:
 Need to use Lutum Veritas without AGPL obligations? Commercial licenses are available.
 
 **Contact:** iamlumae@gmail.com
-
----
-
-## Security
-
-SHA256 Checksums for v1.2.1:
-
-```
-lutum-desktop.exe:              4b4e3730faaba4702791bd55b295b77286503914f7bddd68f5d6f8dbbc3bb7b5
-lutum-backend.exe:              45497969ecd54b15a43aa911c43a89dfa14d3bdf084da747cf2fda96552a22a5
-Lutum Veritas_1.2.1_x64-setup:  71e5b6ef08744293d73c5c8328cea7fca1afe62794c293424bb86a2874008cb8
-```
 
 ---
 
