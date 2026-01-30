@@ -13,7 +13,9 @@ export interface Message {
   timestamp: string; // ISO string für JSON serialization
   url?: string;
   /** Spezial-Typ für verschiedene Anzeigen */
-  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry";
+  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry" | "log";
+  /** Log Level für log-Nachrichten */
+  logLevel?: "warning" | "error";
   /** URLs für sources-Typ (aufklappbare Quellen-Box) */
   sources?: string[];
   /** Source Registry für klickbare Citations {1: "url1", 2: "url2"} */

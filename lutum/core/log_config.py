@@ -19,10 +19,13 @@ Live Log Buffer:
 """
 
 import logging
+import os
 import sys
-from typing import Optional
 from collections import deque
+from logging.handlers import TimedRotatingFileHandler
+from pathlib import Path
 from threading import Lock
+from typing import Optional
 
 
 # ACHTUNG: Globaler State - wird einmal beim Import konfiguriert
@@ -104,6 +107,27 @@ def _install_live_handler():
     root_logger.addHandler(live_handler)
 
 
+def _resolve_log_path(log_file: Optional[str]) -> Optional[Path]:
+    """
+    Resolve log file path (creates parent dir if needed).
+
+    Uses LUTUM_LOG_FILE or LUTUM_LOG_DIR when no explicit log_file is provided.
+    """
+    if log_file:
+        return Path(log_file).expanduser()
+
+    if os.getenv("LUTUM_DISABLE_LOG_FILE") == "1":
+        return None
+
+    log_dir = os.getenv("LUTUM_LOG_DIR")
+    if log_dir:
+        base_dir = Path(log_dir).expanduser()
+    else:
+        base_dir = Path.home() / ".lutum-veritas" / "logs"
+
+    return base_dir / "lutum.log"
+
+
 # === MAIN LOGGING SETUP ===
 
 def setup_logging(
@@ -140,10 +164,19 @@ def setup_logging(
     console_handler.setFormatter(logging.Formatter(log_format, DATE_FORMAT))
     handlers.append(console_handler)
 
-    # File Handler - optional
-    if log_file:
+    # File Handler - optional (daily rotation)
+    resolved_path = _resolve_log_path(log_file)
+    if resolved_path:
         try:
-            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            resolved_path.parent.mkdir(parents=True, exist_ok=True)
+            file_handler = TimedRotatingFileHandler(
+                resolved_path,
+                when="midnight",
+                interval=1,
+                backupCount=14,
+                encoding="utf-8",
+                delay=True
+            )
             file_handler.setLevel(level)
             file_handler.setFormatter(logging.Formatter(log_format, DATE_FORMAT))
             handlers.append(file_handler)

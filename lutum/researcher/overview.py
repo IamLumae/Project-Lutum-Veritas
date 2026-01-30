@@ -7,16 +7,13 @@ Bevor wir planen, holen wir uns erstmal eine Übersicht.
 LLM analysiert was der User will und generiert Google Queries.
 """
 
-import requests
-from typing import Optional
+from typing import Optional, Tuple
 
 from lutum.core.log_config import get_logger
-from lutum.core.api_config import get_api_key
+from lutum.core.api_config import get_work_model
+from lutum.core.llm_client import call_chat_completion
 
 logger = get_logger(__name__)
-
-# === CONFIG ===
-MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 
 # === PROMPT ===
@@ -90,7 +87,7 @@ def _parse_response(response: str) -> tuple[str, list[str]]:
         return "", []
 
 
-def _call_llm(user_message: str, max_tokens: int = 2000) -> Optional[str]:
+def _call_llm(user_message: str, max_tokens: int = 2000) -> Tuple[Optional[str], Optional[str]]:
     """
     Ruft LLM mit Get-Overview Prompt auf.
 
@@ -105,45 +102,23 @@ def _call_llm(user_message: str, max_tokens: int = 2000) -> Optional[str]:
 
     full_prompt = GET_OVERVIEW_PROMPT + user_message
 
-    try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {get_api_key()}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "messages": [
-                    {"role": "user", "content": full_prompt}
-                ],
-                "max_tokens": max_tokens
-            },
-            timeout=60
-        )
+    result = call_chat_completion(
+        messages=[{"role": "user", "content": full_prompt}],
+        model=get_work_model(),
+        max_tokens=max_tokens,
+        timeout=60
+    )
 
-        result = response.json()
+    if result.error:
+        return None, result.error
 
-        if "choices" not in result:
-            logger.error(f"LLM error: {result}")
-            return None
+    if not result.content:
+        return None, "LLM response empty"
 
-        answer = result["choices"][0]["message"]["content"]
-        logger.info(f"LLM response: {len(answer)} chars")
-        logger.info(f"[OVERVIEW] RAW LLM RESPONSE:\n{answer}")
-        return answer
-
-    except requests.Timeout:
-        logger.error("LLM timeout (60s)")
-        return None
-
-    except requests.RequestException as e:
-        logger.error(f"LLM request failed: {e}")
-        return None
-
-    except Exception as e:
-        logger.error(f"LLM unexpected error: {e}")
-        return None
+    answer = str(result.content)
+    logger.info(f"LLM response: {len(answer)} chars")
+    logger.info(f"[OVERVIEW] RAW LLM RESPONSE:\n{answer}")
+    return answer, None
 
 
 def get_overview_queries(user_message: str) -> dict:
@@ -164,14 +139,14 @@ def get_overview_queries(user_message: str) -> dict:
 
     try:
         # LLM aufrufen
-        raw_response = _call_llm(user_message)
+        raw_response, error_message = _call_llm(user_message)
 
         if not raw_response:
             return {
                 "session_title": "",
                 "queries_initial": [],
                 "raw_response": None,
-                "error": "LLM call failed"
+                "error": error_message or "LLM call failed"
             }
 
         # Session-Titel + Queries parsen

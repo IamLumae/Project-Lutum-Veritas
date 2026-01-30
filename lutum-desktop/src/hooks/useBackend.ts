@@ -46,6 +46,9 @@ function getUserFriendlyError(error: unknown): string {
   if (lowerMsg.includes('api key') || lowerMsg.includes('api_key')) {
     return 'Problem mit dem API-Key. Bitte in den Einstellungen überprüfen.';
   }
+  if (lowerMsg.includes('model not found') || lowerMsg.includes('unknown model')) {
+    return 'Das Modell wurde nicht gefunden. Bitte prüfe den Modellnamen in den Einstellungen.';
+  }
   if (lowerMsg.includes('quota') || lowerMsg.includes('credits')) {
     return 'API-Kontingent aufgebraucht. Bitte API-Key-Guthaben prüfen.';
   }
@@ -265,14 +268,32 @@ export function useBackend() {
    * Gibt session_title zurück für Session-Benennung.
    */
   const startResearch = useCallback(
-    async (message: string, apiKey: string, sessionId?: string, modelSize: string = 'small', academicMode: boolean = false): Promise<OverviewResponse | null> => {
+    async (
+      message: string,
+      apiKey: string,
+      sessionId?: string,
+      modelSize: string = 'small',
+      academicMode: boolean = false,
+      provider: string = 'openrouter',
+      workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
+      baseUrl: string = 'https://openrouter.ai/api/v1/chat/completions'
+    ): Promise<OverviewResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
       try {
         const response = await fetch(`${BACKEND_URL}/research/overview`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, api_key: apiKey, session_id: sessionId, model_size: modelSize, academic_mode: academicMode }),
+          body: JSON.stringify({
+            message,
+            api_key: apiKey,
+            session_id: sessionId,
+            model_size: modelSize,
+            academic_mode: academicMode,
+            provider,
+            work_model: workModel,
+            base_url: baseUrl,
+          }),
         });
 
         if (!response.ok) {
@@ -312,7 +333,10 @@ export function useBackend() {
       onLog?: (event: LogEvent) => void,
       modelSize: string = 'small',
       academicMode: boolean = false,
-      language: string = 'de'
+      language: string = 'de',
+      provider: string = 'openrouter',
+      workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
+      baseUrl: string = 'https://openrouter.ai/api/v1/chat/completions'
     ): Promise<PipelineResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -320,7 +344,18 @@ export function useBackend() {
         const response = await fetch(`${BACKEND_URL}/research/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, api_key: apiKey, session_id: sessionId, max_step: 3, model_size: modelSize, academic_mode: academicMode, language: language }),
+          body: JSON.stringify({
+            message,
+            api_key: apiKey,
+            session_id: sessionId,
+            max_step: 3,
+            model_size: modelSize,
+            academic_mode: academicMode,
+            language: language,
+            provider,
+            work_model: workModel,
+            base_url: baseUrl,
+          }),
         });
 
         if (!response.ok) {
@@ -397,7 +432,10 @@ export function useBackend() {
       apiKey: string,
       sessionId?: string,
       modelSize: string = 'small',
-      academicMode: boolean = false
+      academicMode: boolean = false,
+      provider: string = 'openrouter',
+      workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
+      baseUrl: string = 'https://openrouter.ai/api/v1/chat/completions'
     ): Promise<PlanResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -413,6 +451,9 @@ export function useBackend() {
             session_id: sessionId,
             model_size: modelSize,
             academic_mode: academicMode,
+            provider,
+            work_model: workModel,
+            base_url: baseUrl,
           }),
         });
 
@@ -449,7 +490,10 @@ export function useBackend() {
       apiKey: string,
       sessionId?: string,
       modelSize: string = 'small',
-      academicMode: boolean = false
+      academicMode: boolean = false,
+      provider: string = 'openrouter',
+      workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
+      baseUrl: string = 'https://openrouter.ai/api/v1/chat/completions'
     ): Promise<PlanResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -464,6 +508,9 @@ export function useBackend() {
             session_id: sessionId,
             model_size: modelSize,
             academic_mode: academicMode,
+            provider,
+            work_model: workModel,
+            base_url: baseUrl,
           }),
         });
 
@@ -506,6 +553,7 @@ export function useBackend() {
       onLog?: (event: LogEvent) => void,
       modelSize: string = 'small',
       academicMode: boolean = false,
+      provider: string = 'openrouter',
       workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
       finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct',
       language: string = 'de',
@@ -523,6 +571,7 @@ export function useBackend() {
             session_id: sessionId,
             model_size: modelSize,
             academic_mode: academicMode,
+            provider,
             work_model: workModel,
             final_model: finalModel,
             language: language,
@@ -628,6 +677,7 @@ export function useBackend() {
       onBereichComplete?: (event: BereichCompleteEvent) => void,
       onMetaSynthesisStart?: (event: MetaSynthesisStartEvent) => void,
       onLog?: (event: LogEvent) => void,
+      provider: string = 'openrouter',
       workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
       finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct',
       language: string = 'de',
@@ -643,6 +693,7 @@ export function useBackend() {
             context_state: contextState,
             api_key: apiKey,
             session_id: sessionId,
+            provider,
             work_model: workModel,
             final_model: finalModel,
             language: language,
@@ -810,6 +861,7 @@ export function useBackend() {
   const resumeSession = useCallback(async (
     sessionId: string,
     apiKey: string,
+    provider: string = 'openrouter',
     workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
     finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct',
     onStatus?: (status: string) => void,
@@ -828,6 +880,7 @@ export function useBackend() {
         body: JSON.stringify({
           session_id: sessionId,
           api_key: apiKey,
+          provider,
           work_model: workModel,
           final_model: finalModel,
           base_url: baseUrl,

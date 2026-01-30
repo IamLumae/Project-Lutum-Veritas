@@ -17,7 +17,8 @@ from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 
 from lutum.core.log_config import get_logger
-from lutum.core.api_config import get_api_key
+from lutum.core.api_config import get_work_model
+from lutum.core.llm_client import call_chat_completion
 
 logger = get_logger(__name__)
 
@@ -204,8 +205,6 @@ async def _close_google_session():
 
 
 # === CONFIG ===
-MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
-
 
 def _format_results_for_llm(search_results: dict[str, list[dict]]) -> str:
     """
@@ -330,39 +329,25 @@ WICHTIG: Wähle URLs die NEUE Informationen liefern, nicht dieselben nochmal!
         context_block=context_block
     )
 
-    try:
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {get_api_key()}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": max_tokens
-            },
-            timeout=60
-        )
+    result = call_chat_completion(
+        messages=[{"role": "user", "content": prompt}],
+        model=get_work_model(),
+        max_tokens=max_tokens,
+        timeout=60
+    )
 
-        result = response.json()
-
-        if "choices" not in result:
-            logger.error(f"LLM error: {result}")
-            return None
-
-        answer = result["choices"][0]["message"]["content"]
-        logger.info(f"LLM picked URLs: {len(answer)} chars response")
-        logger.info(f"[SEARCH] RAW LLM RESPONSE:\n{answer}")
-        return answer
-
-    except requests.Timeout:
-        logger.error("LLM timeout")
+    if result.error:
+        logger.error(f"LLM call failed: {result.error}")
         return None
 
-    except Exception as e:
-        logger.error(f"LLM call failed: {e}")
+    if not result.content:
+        logger.error("LLM response empty")
         return None
+
+    answer = str(result.content)
+    logger.info(f"LLM picked URLs: {len(answer)} chars response")
+    logger.info(f"[SEARCH] RAW LLM RESPONSE:\n{answer}")
+    return answer
 
 
 def _parse_urls(response: str) -> list[str]:
@@ -495,7 +480,7 @@ if __name__ == "__main__":
         for i, url in enumerate(result["urls_picked"], 1):
             print(f"  {i}. {url}")
 
-        if result["error"]:
-            print(f"\nError: {result['error']}")
+    if result["error"]:
+        logger.error("Error: %s", result["error"])
 
     asyncio.run(test())
