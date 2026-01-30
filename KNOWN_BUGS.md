@@ -10,4 +10,11 @@
 
 ---
 
-*Last updated: 2026-01-29*
+### PDF Export Formatting
+**Status:** Open
+**Description:** PDF export has formatting issues - layout/styling doesn't match the in-app rendering.
+**Workaround:** Use Markdown export instead, then convert to PDF with external tool if needed.
+
+---
+
+*Last updated: 2026-01-30*
