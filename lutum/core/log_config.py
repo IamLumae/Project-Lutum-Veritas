@@ -12,21 +12,99 @@ Log Levels:
 Usage:
     from lutum.core.log_config import get_logger
     logger = get_logger(__name__)
+
+Live Log Buffer:
+    from lutum.core.log_config import get_and_clear_log_buffer
+    logs = get_and_clear_log_buffer()  # Returns list of {"level", "message", "short"} dicts
 """
 
 import logging
 import sys
 from typing import Optional
+from collections import deque
+from threading import Lock
 
 
 # ACHTUNG: Globaler State - wird einmal beim Import konfiguriert
 _configured = False
+
+# === LIVE LOG BUFFER ===
+# Captures WARN/ERROR logs for streaming to frontend
+_log_buffer: deque = deque(maxlen=100)  # Max 100 entries
+_log_buffer_lock = Lock()
 
 # Format für Log-Nachrichten
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 LOG_FORMAT_DEBUG = "%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno)d): %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+
+# === LIVE LOG BUFFER HANDLER ===
+# Must be defined BEFORE setup_logging
+
+class LiveLogHandler(logging.Handler):
+    """
+    Custom handler that captures WARN/ERROR logs to a buffer
+    for streaming to the frontend.
+    """
+
+    def __init__(self):
+        super().__init__(level=logging.WARNING)  # Only WARN and above
+
+    def emit(self, record: logging.LogRecord):
+        try:
+            msg = self.format(record)
+            level = record.levelname
+            with _log_buffer_lock:
+                _log_buffer.append({
+                    "level": level,
+                    "message": msg,
+                    "module": record.name,
+                    "short": record.getMessage()[:200]  # Truncated version for UI
+                })
+        except Exception:
+            pass  # Never crash on logging
+
+
+def get_and_clear_log_buffer() -> list:
+    """
+    Get all buffered WARN/ERROR logs and clear the buffer.
+
+    Returns:
+        List of log entries: [{"level": "WARNING", "message": "...", "short": "..."}, ...]
+    """
+    with _log_buffer_lock:
+        logs = list(_log_buffer)
+        _log_buffer.clear()
+    return logs
+
+
+def peek_log_buffer() -> list:
+    """
+    Peek at the log buffer without clearing it.
+
+    Returns:
+        List of log entries
+    """
+    with _log_buffer_lock:
+        return list(_log_buffer)
+
+
+def _install_live_handler():
+    """Install the live log handler on the lutum logger."""
+    root_logger = logging.getLogger("lutum")
+
+    # Check if already installed
+    for handler in root_logger.handlers:
+        if isinstance(handler, LiveLogHandler):
+            return
+
+    live_handler = LiveLogHandler()
+    live_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+    root_logger.addHandler(live_handler)
+
+
+# === MAIN LOGGING SETUP ===
 
 def setup_logging(
     level: int = logging.INFO,
@@ -84,6 +162,9 @@ def setup_logging(
     # Neue Handler hinzufügen
     for handler in handlers:
         root_logger.addHandler(handler)
+
+    # Install live log handler for frontend streaming
+    _install_live_handler()
 
     _configured = True
     root_logger.debug("Logging konfiguriert (Level: %s)", logging.getLevelName(level))

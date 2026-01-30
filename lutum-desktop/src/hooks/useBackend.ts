@@ -139,6 +139,13 @@ export interface MetaSynthesisStartEvent {
   totalSources: number;
 }
 
+/** Backend Log Event (WARN/ERROR level) */
+export interface LogEvent {
+  level: "WARNING" | "ERROR";
+  message: string;  // Short version for display
+  full: string;     // Full log message
+}
+
 export interface ContextState {
   user_query: string;
   clarification_questions: string[];
@@ -302,8 +309,10 @@ export function useBackend() {
       sessionId?: string,
       onStatus?: (status: string) => void,
       onSources?: (urls: string[]) => void,
+      onLog?: (event: LogEvent) => void,
       modelSize: string = 'small',
-      academicMode: boolean = false
+      academicMode: boolean = false,
+      language: string = 'de'
     ): Promise<PipelineResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -311,7 +320,7 @@ export function useBackend() {
         const response = await fetch(`${BACKEND_URL}/research/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message, api_key: apiKey, session_id: sessionId, max_step: 3, model_size: modelSize, academic_mode: academicMode }),
+          body: JSON.stringify({ message, api_key: apiKey, session_id: sessionId, max_step: 3, model_size: modelSize, academic_mode: academicMode, language: language }),
         });
 
         if (!response.ok) {
@@ -343,6 +352,13 @@ export function useBackend() {
                 // Sources Event: URLs an Frontend melden
                 onSources(parsed.urls);
                 if (onStatus) onStatus(parsed.message);
+              } else if (parsed.type === "log" && onLog) {
+                // Backend log event (WARN/ERROR)
+                onLog({
+                  level: parsed.level,
+                  message: parsed.message,
+                  full: parsed.full,
+                });
               } else if (parsed.type === "done") {
                 result = parsed.data;
               } else if (parsed.type === "error") {
@@ -487,10 +503,12 @@ export function useBackend() {
       onSources?: (urls: string[]) => void,
       onPointComplete?: (event: PointCompleteEvent) => void,
       onSynthesisStart?: (event: SynthesisStartEvent) => void,
+      onLog?: (event: LogEvent) => void,
       modelSize: string = 'small',
       academicMode: boolean = false,
       workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
-      finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct'
+      finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct',
+      language: string = 'de'
     ): Promise<DeepResearchResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -506,6 +524,7 @@ export function useBackend() {
             academic_mode: academicMode,
             work_model: workModel,
             final_model: finalModel,
+            language: language,
           }),
         });
 
@@ -557,6 +576,13 @@ export function useBackend() {
                   totalSources: parsed.total_sources,
                 });
                 if (onStatus) onStatus(parsed.message);
+              } else if (parsed.type === "log" && onLog) {
+                // Backend log event (WARN/ERROR)
+                onLog({
+                  level: parsed.level,
+                  message: parsed.message,
+                  full: parsed.full,
+                });
               } else if (parsed.type === "done") {
                 result = parsed.data;
               } else if (parsed.type === "error") {
@@ -599,8 +625,10 @@ export function useBackend() {
       onBereichStart?: (event: BereichStartEvent) => void,
       onBereichComplete?: (event: BereichCompleteEvent) => void,
       onMetaSynthesisStart?: (event: MetaSynthesisStartEvent) => void,
+      onLog?: (event: LogEvent) => void,
       workModel: string = 'google/gemini-2.5-flash-lite-preview-09-2025',
-      finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct'
+      finalModel: string = 'qwen/qwen3-vl-235b-a22b-instruct',
+      language: string = 'de'
     ): Promise<AcademicResearchResponse | null> => {
       setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -614,6 +642,7 @@ export function useBackend() {
             session_id: sessionId,
             work_model: workModel,
             final_model: finalModel,
+            language: language,
           }),
         });
 
@@ -681,6 +710,13 @@ export function useBackend() {
                   totalSources: parsed.total_sources,
                 });
                 if (onStatus) onStatus(parsed.message);
+              } else if (parsed.type === "log" && onLog) {
+                // Backend log event (WARN/ERROR)
+                onLog({
+                  level: parsed.level,
+                  message: parsed.message,
+                  full: parsed.full,
+                });
               } else if (parsed.type === "done") {
                 result = parsed.data;
               } else if (parsed.type === "error") {
@@ -775,7 +811,8 @@ export function useBackend() {
     onStatus?: (status: string) => void,
     onSources?: (urls: string[]) => void,
     onPointComplete?: (event: PointCompleteEvent) => void,
-    onSynthesisStart?: (event: SynthesisStartEvent) => void
+    onSynthesisStart?: (event: SynthesisStartEvent) => void,
+    onLog?: (event: LogEvent) => void
   ): Promise<DeepResearchResponse | null> => {
     setState((s) => ({ ...s, loading: true, error: null }));
 
@@ -821,6 +858,13 @@ export function useBackend() {
               onPointComplete(event as PointCompleteEvent);
             } else if (event.type === "synthesis_start" && onSynthesisStart) {
               onSynthesisStart(event as SynthesisStartEvent);
+            } else if (event.type === "log" && onLog) {
+              // Backend log event (WARN/ERROR)
+              onLog({
+                level: event.level,
+                message: event.message,
+                full: event.full,
+              });
             } else if (event.type === "done") {
               finalResult = event.data;
             } else if (event.type === "error") {

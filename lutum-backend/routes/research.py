@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from lutum.core.log_config import get_logger
+from lutum.core.log_config import get_logger, get_and_clear_log_buffer
 from lutum.core.api_config import get_api_key, set_api_key
 from lutum.researcher.overview import get_overview_queries
 from lutum.researcher.pipeline import run_pipeline, format_pipeline_response
@@ -40,6 +40,98 @@ from lutum.researcher.prompts import (
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["Research"])
+
+
+# === i18n STATUS MESSAGES ===
+# All user-facing status messages in DE and EN
+STATUS_MESSAGES = {
+    # Pipeline (Step 1-3)
+    "getting_overview": {"de": "Ich verschaffe mir eine Übersicht...", "en": "Getting an overview..."},
+    "overview_done": {"de": "Übersicht erstellt ({count} Suchanfragen)", "en": "Overview complete ({count} search queries)"},
+    "searching_google": {"de": "Ich durchsuche Google...", "en": "Searching Google..."},
+    "sources_found": {"de": "Quellen gefunden ({count} URLs)", "en": "Sources found ({count} URLs)"},
+    "reading_sources": {"de": "Ich lese die Quellen...", "en": "Reading sources..."},
+    "sources_analyzed": {"de": "Quellen analysiert ({count} Seiten)", "en": "Sources analyzed ({count} pages)"},
+
+    # Deep Research
+    "deep_research_start": {"de": "Starte Deep Research mit {count} Punkten...", "en": "Starting Deep Research with {count} points..."},
+    "developing_strategy": {"de": "[{idx}] Entwickle Suchstrategie...", "en": "[{idx}] Developing search strategy..."},
+    "think_failed": {"de": "[{idx}] Think fehlgeschlagen, überspringe...", "en": "[{idx}] Think failed, skipping..."},
+    "no_queries": {"de": "[{idx}] Keine Suchqueries generiert", "en": "[{idx}] No search queries generated"},
+    "searches_planned": {"de": "[{idx}] {count} Suchen geplant", "en": "[{idx}] {count} searches planned"},
+    "searching": {"de": "[{idx}] Durchsuche Google...", "en": "[{idx}] Searching Google..."},
+    "no_results": {"de": "[{idx}] Keine Suchergebnisse", "en": "[{idx}] No search results"},
+    "selecting_sources": {"de": "[{idx}] Wähle beste Quellen...", "en": "[{idx}] Selecting best sources..."},
+    "few_results_retry": {"de": "[{idx}] Wenige Ergebnisse - reformuliere Suche...", "en": "[{idx}] Few results - reformulating search..."},
+    "retry_with_new": {"de": "[{idx}] Retry mit {count} neuen Suchen...", "en": "[{idx}] Retry with {count} new searches..."},
+    "no_urls_skip": {"de": "[{idx}] Keine URLs gefunden, überspringe Punkt", "en": "[{idx}] No URLs found, skipping point"},
+    "urls_selected": {"de": "[{idx}] {count} URLs ausgewählt", "en": "[{idx}] {count} URLs selected"},
+    "reading": {"de": "[{idx}] Lese Quellen...", "en": "[{idx}] Reading sources..."},
+    "no_content": {"de": "[{idx}] Keine Inhalte gescraped", "en": "[{idx}] No content scraped"},
+    "sources_read": {"de": "[{idx}] {count} Quellen gelesen", "en": "[{idx}] {count} sources read"},
+    "creating_dossier": {"de": "[{idx}] Erstelle Dossier...", "en": "[{idx}] Creating dossier..."},
+    "dossier_failed": {"de": "[{idx}] Dossier-Erstellung fehlgeschlagen", "en": "[{idx}] Dossier creation failed"},
+    "dossier_done": {"de": "[{idx}] Dossier fertig!", "en": "[{idx}] Dossier complete!"},
+
+    # Final Synthesis
+    "starting_synthesis": {"de": "Starte finale Synthese...", "en": "Starting final synthesis..."},
+    "combining_dossiers": {"de": "Kombiniere {count} Dossiers zu Gesamtdokument...", "en": "Combining {count} dossiers into final document..."},
+    "synthesis_failed_fallback": {"de": "Final Synthesis fehlgeschlagen, nutze Fallback...", "en": "Final synthesis failed, using fallback..."},
+    "research_complete": {"de": "Recherche abgeschlossen in {duration}s", "en": "Research complete in {duration}s"},
+
+    # Academic Mode
+    "academic_start": {"de": "Academic Mode: {bereiche} Bereiche mit {points} Punkten", "en": "Academic Mode: {bereiche} areas with {points} points"},
+    "academic_complete": {"de": "Academic Research abgeschlossen in {duration}s", "en": "Academic Research complete in {duration}s"},
+
+    # Session Resume
+    "session_resumed": {"de": "Session fortgesetzt: {done}/{total} Dossiers fertig, {remaining} noch offen", "en": "Session resumed: {done}/{total} dossiers complete, {remaining} remaining"},
+
+    # PICK event
+    "pick_point": {"de": "PICK: Punkt {idx}/{total} → {title}", "en": "PICK: Point {idx}/{total} → {title}"},
+    "remaining": {"de": "Verbleibend: {count} Punkte", "en": "Remaining: {count} points"},
+}
+
+
+def t(key: str, lang: str = "de", **kwargs) -> str:
+    """
+    Translate a status message key to the specified language.
+
+    Args:
+        key: Message key from STATUS_MESSAGES
+        lang: Language code ("de" or "en"), defaults to "de"
+        **kwargs: Format arguments for the message
+
+    Returns:
+        Translated and formatted message string
+    """
+    if key not in STATUS_MESSAGES:
+        logger.warning(f"Missing translation key: {key}")
+        return key
+
+    msg = STATUS_MESSAGES[key].get(lang, STATUS_MESSAGES[key].get("de", key))
+    try:
+        return msg.format(**kwargs) if kwargs else msg
+    except KeyError as e:
+        logger.warning(f"Missing format arg for {key}: {e}")
+        return msg
+
+
+def flush_log_buffer():
+    """
+    Yields SSE events for any buffered WARN/ERROR logs.
+    Call this periodically in streaming endpoints to surface backend errors to user.
+
+    Yields:
+        JSON strings with {"type": "log", "level": "WARNING|ERROR", "message": "..."}
+    """
+    logs = get_and_clear_log_buffer()
+    for log in logs:
+        yield json.dumps({
+            "type": "log",
+            "level": log["level"],
+            "message": log["short"],
+            "full": log["message"]
+        }) + "\n"
 
 # === EVENT BUS ===
 # Globale Queue für SSE Events - Frontend hört zu
@@ -221,6 +313,7 @@ class PipelineRequest(BaseModel):
     session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
     max_step: int = Field(3, ge=1, le=5, description="Bis zu welchem Step ausführen (default 3)")
     api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    language: str = Field("de", description="Language for status messages (de/en)")
 
 
 class PipelineResponse(BaseModel):
@@ -255,6 +348,7 @@ async def research_run(request: PipelineRequest):
     async def generate():
         # API Key setzen für alle LLM Calls
         set_api_key(request.api_key)
+        lang = request.language
 
         try:
             if not request.message or not request.message.strip():
@@ -265,7 +359,7 @@ async def research_run(request: PipelineRequest):
             context = {"user_message": user_message, "error": None}
 
             # === STEP 1: Overview ===
-            yield json.dumps({"type": "status", "message": "Ich verschaffe mir eine Übersicht..."}) + "\n"
+            yield json.dumps({"type": "status", "message": t("getting_overview", lang)}) + "\n"
 
             result1 = get_overview_queries(user_message)
             context.update(result1)
@@ -275,11 +369,11 @@ async def research_run(request: PipelineRequest):
                 return
 
             queries = context.get("queries_initial", [])
-            yield json.dumps({"type": "status", "message": f"Übersicht erstellt ({len(queries)} Suchanfragen)"}) + "\n"
+            yield json.dumps({"type": "status", "message": t("overview_done", lang, count=len(queries))}) + "\n"
 
             # === STEP 2: Search ===
             if request.max_step >= 2:
-                yield json.dumps({"type": "status", "message": "Ich durchsuche Google..."}) + "\n"
+                yield json.dumps({"type": "status", "message": t("searching_google", lang)}) + "\n"
 
                 result2 = await get_initial_data(user_message, queries)
                 context.update(result2)
@@ -293,26 +387,30 @@ async def research_run(request: PipelineRequest):
                     return
 
                 urls = context.get("urls_picked", [])
-                yield json.dumps({"type": "status", "message": f"Quellen gefunden ({len(urls)} URLs)"}) + "\n"
+                yield json.dumps({"type": "status", "message": t("sources_found", lang, count=len(urls))}) + "\n"
 
                 # Sources Event mit URL-Liste für Frontend
                 if urls:
-                    yield json.dumps({"type": "sources", "urls": urls, "message": f"{len(urls)} Quellen werden analysiert"}) + "\n"
+                    yield json.dumps({"type": "sources", "urls": urls, "message": t("sources_found", lang, count=len(urls))}) + "\n"
 
             # === STEP 3: Clarify ===
             if request.max_step >= 3:
                 urls = context.get("urls_picked", [])
                 if urls:
-                    yield json.dumps({"type": "status", "message": "Ich lese die Quellen..."}) + "\n"
+                    yield json.dumps({"type": "status", "message": t("reading_sources", lang)}) + "\n"
 
                     result3 = await get_clarification(user_message, urls)
                     context.update(result3)
 
                     scraped = context.get("success_count", 0)
-                    yield json.dumps({"type": "status", "message": f"Quellen analysiert ({scraped} Seiten)"}) + "\n"
+                    yield json.dumps({"type": "status", "message": t("sources_analyzed", lang, count=scraped)}) + "\n"
 
             # Response formatieren
             response_text = format_pipeline_response(context)
+
+            # Flush any buffered logs before done
+            for log_event in flush_log_buffer():
+                yield log_event
 
             # Finale Response
             yield json.dumps({
@@ -526,6 +624,7 @@ class DeepResearchRequest(BaseModel):
     api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
     work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="Modell für Vorarbeit (Think, Pick URLs, Dossier)", max_length=100)
     final_model: str = Field("qwen/qwen3-vl-235b-a22b-instruct", description="Modell für Final Synthesis", max_length=100)
+    language: str = Field("de", description="Language for status messages (de/en)")
 
 
 class DeepResearchResponse(BaseModel):
@@ -635,13 +734,14 @@ async def research_deep(request: DeepResearchRequest):
         return None
 
     async def generate():
+        lang = request.language
         try:
             # Context State laden
             context = ContextState.from_dict(request.context_state)
             research_plan = context.research_plan
 
             if not research_plan or len(research_plan) == 0:
-                yield json.dumps({"type": "error", "message": "Kein Recherche-Plan vorhanden"}) + "\n"
+                yield json.dumps({"type": "error", "message": "No research plan" if lang == "en" else "Kein Recherche-Plan vorhanden"}) + "\n"
                 return
 
             user_query = context.user_query
@@ -704,10 +804,10 @@ async def research_deep(request: DeepResearchRequest):
                 logger.info(f"[RESUME] Continuing session with {len(completed_dossiers)} existing dossiers, {len(research_plan)} remaining")
                 yield json.dumps({
                     "type": "status",
-                    "message": f"Session fortgesetzt: {len(completed_dossiers)}/{total_points} Dossiers fertig, {len(research_plan)} noch offen"
+                    "message": t("session_resumed", lang, done=len(completed_dossiers), total=total_points, remaining=len(research_plan))
                 }) + "\n"
             else:
-                yield json.dumps({"type": "status", "message": f"Starte Deep Research mit {total_points} Punkten..."}) + "\n"
+                yield json.dumps({"type": "status", "message": t("deep_research_start", lang, count=total_points)}) + "\n"
                 # Initial Checkpoint: Plan gespeichert
                 save_checkpoint(session_id, {
                     "user_query": user_query,
@@ -735,17 +835,17 @@ async def research_deep(request: DeepResearchRequest):
                 remaining_titles = [p[:30] + "..." if len(p) > 30 else p for p in remaining_points]
                 yield json.dumps({
                     "type": "status",
-                    "message": f"PICK: Punkt {point_index}/{total_points} → {point_title}"
+                    "message": t("pick_point", lang, idx=point_index, total=total_points, title=point_title)
                 }) + "\n"
 
                 if remaining_points:
                     yield json.dumps({
                         "type": "status",
-                        "message": f"Verbleibend: {len(remaining_points)} Punkte"
+                        "message": t("remaining", lang, count=len(remaining_points))
                     }) + "\n"
 
                 # --- STEP A: Think (Suchstrategie) ---
-                yield json.dumps({"type": "status", "message": f"[{point_index}] Entwickle Suchstrategie..."}) + "\n"
+                yield json.dumps({"type": "status", "message": t("developing_strategy", lang, idx=point_index)}) + "\n"
                 step_start = time.time()
 
                 system_prompt, user_prompt = build_think_prompt(
@@ -760,19 +860,22 @@ async def research_deep(request: DeepResearchRequest):
                     model=MODEL_FAST,
                     timeout=60
                 )
+                # Flush logs after LLM call
+                for log_event in flush_log_buffer():
+                    yield log_event
                 logger.info(f"[{point_index}] TIMING: Think LLM took {time.time() - step_start:.1f}s")
                 logger.info(f"[{point_index}] [THINK] RAW LLM RESPONSE:\n{think_response[:2000] if think_response else 'NONE'}")
 
                 if not think_response:
-                    yield json.dumps({"type": "status", "message": f"[{point_index}] Think fehlgeschlagen, überspringe..."}) + "\n"
+                    yield json.dumps({"type": "status", "message": t("think_failed", lang, idx=point_index)}) + "\n"
                     yield json.dumps({
                         "type": "point_complete",
                         "point_title": current_point,
                         "point_number": point_index,
                         "total_points": total_points,
                         "skipped": True,
-                        "skip_reason": "Think LLM fehlgeschlagen",
-                        "key_learnings": "Übersprungen - keine Suchstrategie generiert"
+                        "skip_reason": "Think LLM failed" if lang == "en" else "Think LLM fehlgeschlagen",
+                        "key_learnings": "Skipped - no search strategy generated" if lang == "en" else "Übersprungen - keine Suchstrategie generiert"
                     }) + "\n"
                     continue
 
@@ -780,22 +883,22 @@ async def research_deep(request: DeepResearchRequest):
                 logger.info(f"[{point_index}] [THINK] PARSED QUERIES: {search_queries}")
 
                 if not search_queries:
-                    yield json.dumps({"type": "status", "message": f"[{point_index}] Keine Suchqueries generiert"}) + "\n"
+                    yield json.dumps({"type": "status", "message": t("no_queries", lang, idx=point_index)}) + "\n"
                     yield json.dumps({
                         "type": "point_complete",
                         "point_title": current_point,
                         "point_number": point_index,
                         "total_points": total_points,
                         "skipped": True,
-                        "skip_reason": "Keine Suchqueries generiert",
-                        "key_learnings": "Übersprungen - LLM konnte keine Suchbegriffe ableiten"
+                        "skip_reason": "No search queries generated" if lang == "en" else "Keine Suchqueries generiert",
+                        "key_learnings": "Skipped - LLM could not derive search terms" if lang == "en" else "Übersprungen - LLM konnte keine Suchbegriffe ableiten"
                     }) + "\n"
                     continue
 
-                yield json.dumps({"type": "status", "message": f"[{point_index}] {len(search_queries)} Suchen geplant"}) + "\n"
+                yield json.dumps({"type": "status", "message": t("searches_planned", lang, idx=point_index, count=len(search_queries))}) + "\n"
 
                 # --- STEP B: Google Search (parallel) ---
-                yield json.dumps({"type": "status", "message": f"[{point_index}] Durchsuche Google..."}) + "\n"
+                yield json.dumps({"type": "status", "message": t("searching", lang, idx=point_index)}) + "\n"
                 step_start = time.time()
 
                 # Dict {query: [results]}
@@ -806,15 +909,15 @@ async def research_deep(request: DeepResearchRequest):
                 logger.info(f"[{point_index}] TIMING: Search took {time.time() - step_start:.1f}s")
 
                 if not search_results_dict or all(len(r) == 0 for r in search_results_dict.values()):
-                    yield json.dumps({"type": "status", "message": f"[{point_index}] Keine Suchergebnisse"}) + "\n"
+                    yield json.dumps({"type": "status", "message": t("no_results", lang, idx=point_index)}) + "\n"
                     yield json.dumps({
                         "type": "point_complete",
                         "point_title": current_point,
                         "point_number": point_index,
                         "total_points": total_points,
                         "skipped": True,
-                        "skip_reason": "Keine Suchergebnisse gefunden",
-                        "key_learnings": "Übersprungen - DuckDuckGo lieferte keine Treffer"
+                        "skip_reason": "No search results found" if lang == "en" else "Keine Suchergebnisse gefunden",
+                        "key_learnings": "Skipped - search returned no results" if lang == "en" else "Übersprungen - Suche lieferte keine Treffer"
                     }) + "\n"
                     continue
 
@@ -832,7 +935,7 @@ async def research_deep(request: DeepResearchRequest):
 
                 # --- STEP C: Pick URLs ---
                 logger.info(f"[{point_index}] === STEP C: Pick URLs START ===")
-                yield json.dumps({"type": "status", "message": f"[{point_index}] Wähle beste Quellen..."}) + "\n"
+                yield json.dumps({"type": "status", "message": t("selecting_sources", lang, idx=point_index)}) + "\n"
                 step_start = time.time()
 
                 logger.info(f"[{point_index}] Building pick_urls prompt...")
@@ -851,6 +954,9 @@ async def research_deep(request: DeepResearchRequest):
                     model=MODEL_FAST,
                     timeout=60
                 )
+                # Flush logs after LLM call
+                for log_event in flush_log_buffer():
+                    yield log_event
                 logger.info(f"[{point_index}] LLM returned, parsing response...")
                 logger.info(f"[{point_index}] RAW LLM RESPONSE:\n{pick_response[:2000] if pick_response else 'NONE'}")
 
@@ -860,7 +966,7 @@ async def research_deep(request: DeepResearchRequest):
 
                 # === RETRY-LOOP bei Sackgassen (<2 URLs) ===
                 if len(selected_urls) < 2:
-                    yield json.dumps({"type": "status", "message": f"[{point_index}] Wenige Ergebnisse - reformuliere Suche..."}) + "\n"
+                    yield json.dumps({"type": "status", "message": t("few_results_retry", lang, idx=point_index)}) + "\n"
 
                     # Reformulierungs-Prompt
                     retry_system = "Du bist ein Research-Experte. Die erste Suche hat keine guten Ergebnisse geliefert."
@@ -886,7 +992,7 @@ search 5: [Query]"""
                         _, retry_queries = parse_think_response("=== SEARCHES ===\n" + retry_response)
 
                         if retry_queries:
-                            yield json.dumps({"type": "status", "message": f"[{point_index}] Retry mit {len(retry_queries)} neuen Suchen..."}) + "\n"
+                            yield json.dumps({"type": "status", "message": t("retry_with_new", lang, idx=point_index, count=len(retry_queries))}) + "\n"
 
                             # Nochmal suchen
                             retry_results = await _execute_all_searches_async(retry_queries, results_per_query=20)
@@ -919,32 +1025,32 @@ search 5: [Query]"""
                                 selected_urls = parse_pick_urls_response(pick_response) if pick_response else selected_urls
 
                 if not selected_urls:
-                    yield json.dumps({"type": "status", "message": f"[{point_index}] Keine URLs gefunden, überspringe Punkt"}) + "\n"
+                    yield json.dumps({"type": "status", "message": t("no_urls_skip", lang, idx=point_index)}) + "\n"
                     yield json.dumps({
                         "type": "point_complete",
                         "point_title": current_point,
                         "point_number": point_index,
                         "total_points": total_points,
                         "skipped": True,
-                        "skip_reason": "Keine URLs nach Retry",
-                        "key_learnings": "Übersprungen - LLM konnte keine relevanten URLs identifizieren"
+                        "skip_reason": "No URLs after retry" if lang == "en" else "Keine URLs nach Retry",
+                        "key_learnings": "Skipped - LLM could not identify relevant URLs" if lang == "en" else "Übersprungen - LLM konnte keine relevanten URLs identifizieren"
                     }) + "\n"
                     continue
 
-                yield json.dumps({"type": "status", "message": f"[{point_index}] {len(selected_urls)} URLs ausgewählt"}) + "\n"
+                yield json.dumps({"type": "status", "message": t("urls_selected", lang, idx=point_index, count=len(selected_urls))}) + "\n"
 
                 # Sources Event für Frontend
                 yield json.dumps({
                     "type": "sources",
                     "urls": selected_urls,
-                    "message": f"Punkt {point_index}: {len(selected_urls)} Quellen"
+                    "message": f"Point {point_index}: {len(selected_urls)} sources" if lang == "en" else f"Punkt {point_index}: {len(selected_urls)} Quellen"
                 }) + "\n"
 
                 all_sources.extend(selected_urls)
 
                 # --- STEP D: Scrape URLs (parallel) ---
                 logger.info(f"[{point_index}] === STEP D: Scrape URLs START === URLs: {selected_urls}")
-                yield json.dumps({"type": "status", "message": f"[{point_index}] Lese Quellen..."}) + "\n"
+                yield json.dumps({"type": "status", "message": t("reading", lang, idx=point_index)}) + "\n"
                 step_start = time.time()
 
                 scraped_contents = await scrape_urls_parallel(selected_urls, timeout=45)
@@ -962,23 +1068,23 @@ search 5: [Query]"""
                 scraped_content = "\n".join(scraped_text_parts)
 
                 if not scraped_content:
-                    yield json.dumps({"type": "status", "message": f"[{point_index}] Keine Inhalte gescraped"}) + "\n"
+                    yield json.dumps({"type": "status", "message": t("no_content", lang, idx=point_index)}) + "\n"
                     yield json.dumps({
                         "type": "point_complete",
                         "point_title": current_point,
                         "point_number": point_index,
                         "total_points": total_points,
                         "skipped": True,
-                        "skip_reason": "Scraping fehlgeschlagen",
-                        "key_learnings": "Übersprungen - alle URLs waren leer oder blockiert"
+                        "skip_reason": "Scraping failed" if lang == "en" else "Scraping fehlgeschlagen",
+                        "key_learnings": "Skipped - all URLs were empty or blocked" if lang == "en" else "Übersprungen - alle URLs waren leer oder blockiert"
                     }) + "\n"
                     continue
 
-                yield json.dumps({"type": "status", "message": f"[{point_index}] {len(scraped_text_parts)} Quellen gelesen"}) + "\n"
+                yield json.dumps({"type": "status", "message": t("sources_read", lang, idx=point_index, count=len(scraped_text_parts))}) + "\n"
 
                 # --- STEP E: Dossier erstellen ---
                 logger.info(f"[{point_index}] === STEP E: Dossier START ===")
-                yield json.dumps({"type": "status", "message": f"[{point_index}] Erstelle Dossier..."}) + "\n"
+                yield json.dumps({"type": "status", "message": t("creating_dossier", lang, idx=point_index)}) + "\n"
                 step_start = time.time()
 
                 logger.info(f"[{point_index}] Building dossier prompt with {len(scraped_text_parts)} sources...")
@@ -996,19 +1102,22 @@ search 5: [Query]"""
                     model=MODEL_FAST,
                     timeout=120
                 )
+                # Flush logs after LLM call
+                for log_event in flush_log_buffer():
+                    yield log_event
                 logger.info(f"[{point_index}] === STEP E DONE: Dossier LLM took {time.time() - step_start:.1f}s ===")
                 logger.info(f"[{point_index}] [DOSSIER] RAW LLM RESPONSE ({len(dossier_response) if dossier_response else 0} chars):\n{dossier_response[:2000] if dossier_response else 'NONE'}...")
 
                 if not dossier_response:
-                    yield json.dumps({"type": "status", "message": f"[{point_index}] Dossier-Erstellung fehlgeschlagen"}) + "\n"
+                    yield json.dumps({"type": "status", "message": t("dossier_failed", lang, idx=point_index)}) + "\n"
                     yield json.dumps({
                         "type": "point_complete",
                         "point_title": current_point,
                         "point_number": point_index,
                         "total_points": total_points,
                         "skipped": True,
-                        "skip_reason": "Dossier LLM fehlgeschlagen",
-                        "key_learnings": "Übersprungen - LLM konnte kein Dossier erstellen"
+                        "skip_reason": "Dossier LLM failed" if lang == "en" else "Dossier LLM fehlgeschlagen",
+                        "key_learnings": "Skipped - LLM could not create dossier" if lang == "en" else "Übersprungen - LLM konnte kein Dossier erstellen"
                     }) + "\n"
                     continue
 
@@ -1046,7 +1155,7 @@ search 5: [Query]"""
                     "status": f"dossier_{point_index}_complete"
                 })
 
-                yield json.dumps({"type": "status", "message": f"[{point_index}] Dossier fertig!"}) + "\n"
+                yield json.dumps({"type": "status", "message": t("dossier_done", lang, idx=point_index)}) + "\n"
 
                 # Point Complete Event für Frontend (mit Key Learnings + vollem Dossier für Ausklappen)
                 yield json.dumps({
@@ -1055,7 +1164,7 @@ search 5: [Query]"""
                     "point_number": point_index,
                     "total_points": total_points,
                     "remaining_count": len(remaining_points),
-                    "key_learnings": key_learnings or "Keine Key Learnings extrahiert",
+                    "key_learnings": key_learnings or ("No key learnings extracted" if lang == "en" else "Keine Key Learnings extrahiert"),
                     "dossier_full": dossier_text,  # Volles Dossier für "Mehr anzeigen" Button
                     "sources": list(scraped_contents.keys())
                 }) + "\n"
@@ -1066,8 +1175,8 @@ search 5: [Query]"""
 
             # === FINAL SYNTHESIS ===
             if completed_dossiers:
-                yield json.dumps({"type": "status", "message": "Starte finale Synthese..."}) + "\n"
-                yield json.dumps({"type": "status", "message": f"Kombiniere {len(completed_dossiers)} Dossiers zu Gesamtdokument..."}) + "\n"
+                yield json.dumps({"type": "status", "message": t("starting_synthesis", lang)}) + "\n"
+                yield json.dumps({"type": "status", "message": t("combining_dossiers", lang, count=len(completed_dossiers))}) + "\n"
 
                 system_prompt, user_prompt = build_final_synthesis_prompt(
                     user_query=user_query,
@@ -1081,7 +1190,7 @@ search 5: [Query]"""
 
                 yield json.dumps({
                     "type": "synthesis_start",
-                    "message": "Final Synthesis läuft - das dauert einige Minuten...",
+                    "message": "Final Synthesis running - this may take a few minutes..." if lang == "en" else "Final Synthesis läuft - das dauert einige Minuten...",
                     "estimated_minutes": estimated_minutes,
                     "dossier_count": len(completed_dossiers),
                     "total_sources": len(source_registry)
@@ -1104,6 +1213,9 @@ search 5: [Query]"""
                     FINAL_SYNTHESIS_TIMEOUT,
                     32000  # Final Synthesis braucht VIEL mehr als 8000!
                 )
+                # Flush logs after Final Synthesis
+                for log_event in flush_log_buffer():
+                    yield log_event
                 logger.info(f"TIMING: Final Synthesis took {time.time() - step_start:.1f}s")
                 logger.info(f"[FINAL] RAW LLM RESPONSE ({len(final_document) if final_document else 0} chars)")
 
@@ -1119,18 +1231,22 @@ search 5: [Query]"""
 
                 if not final_document:
                     # Fallback: Einfach alle Dossiers zusammenfügen
-                    yield json.dumps({"type": "status", "message": "Final Synthesis fehlgeschlagen, nutze Fallback..."}) + "\n"
-                    final_document = "# Recherche-Ergebnis\n\n"
+                    yield json.dumps({"type": "status", "message": t("synthesis_failed_fallback", lang)}) + "\n"
+                    final_document = "# Research Result\n\n" if lang == "en" else "# Recherche-Ergebnis\n\n"
                     for d in completed_dossiers:
                         final_document += f"## {d['point']}\n\n{d['dossier']}\n\n---\n\n"
 
             else:
-                final_document = "Keine Dossiers erstellt - Recherche fehlgeschlagen."
+                final_document = "No dossiers created - research failed." if lang == "en" else "Keine Dossiers erstellt - Recherche fehlgeschlagen."
 
             # === DONE ===
             duration = time.time() - start_time
 
-            yield json.dumps({"type": "status", "message": f"Recherche abgeschlossen in {duration:.1f}s"}) + "\n"
+            yield json.dumps({"type": "status", "message": t("research_complete", lang, duration=f"{duration:.1f}")}) + "\n"
+
+            # Flush any remaining logs before done
+            for log_event in flush_log_buffer():
+                yield log_event
 
             # Source Registry für Frontend: {1: "url1", 2: "url2", ...}
             logger.info(f"[DONE] Source Registry has {len(source_registry)} entries")
@@ -1149,6 +1265,9 @@ search 5: [Query]"""
 
         except Exception as e:
             logger.error(f"Deep Research failed: {e}", exc_info=True)
+            # Flush logs to capture error details
+            for log_event in flush_log_buffer():
+                yield log_event
             # Security: Don't expose internal error details to client
             yield json.dumps({"type": "error", "message": "Deep research failed. Please try again."}) + "\n"
 
@@ -1277,6 +1396,7 @@ class ResumeRequest(BaseModel):
     api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
     work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", max_length=100)
     final_model: str = Field("qwen/qwen3-vl-235b-a22b-instruct", max_length=100)
+    language: str = Field("de", description="Language for status messages (de/en)")
 
 
 @router.post("/research/resume")
@@ -1333,6 +1453,7 @@ class AcademicResearchRequest(BaseModel):
     api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
     work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="Modell für Vorarbeit", max_length=100)
     final_model: str = Field("anthropic/claude-sonnet-4.5", description="Modell für Meta-Synthesis", max_length=100)
+    language: str = Field("de", description="Language for status messages (de/en)")
 
 
 @router.post("/research/academic")
@@ -1419,6 +1540,7 @@ async def research_academic(request: AcademicResearchRequest):
         return await scrape_urls_batch(urls, timeout=timeout)
 
     async def generate():
+        lang = request.language
         try:
             # Context laden
             context_state = request.context_state
@@ -1426,7 +1548,7 @@ async def research_academic(request: AcademicResearchRequest):
             academic_bereiche = context_state.get("academic_bereiche", {})
 
             if not academic_bereiche:
-                yield json.dumps({"type": "error", "message": "Keine Academic Bereiche im Context"}) + "\n"
+                yield json.dumps({"type": "error", "message": "No academic areas in context" if lang == "en" else "Keine Academic Bereiche im Context"}) + "\n"
                 return
 
             total_bereiche = len(academic_bereiche)
@@ -1434,7 +1556,7 @@ async def research_academic(request: AcademicResearchRequest):
 
             yield json.dumps({
                 "type": "status",
-                "message": f"Academic Mode: {total_bereiche} Bereiche mit {total_points} Punkten"
+                "message": t("academic_start", lang, bereiche=total_bereiche, points=total_points)
             }) + "\n"
 
             # === GLOBALE TRACKING ===
@@ -1486,7 +1608,7 @@ async def research_academic(request: AcademicResearchRequest):
                     }) + "\n"
 
                     # --- STEP A: Think ---
-                    yield json.dumps({"type": "status", "message": f"{punkt_label} Entwickle Suchstrategie..."}) + "\n"
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} {'Developing search strategy...' if lang == 'en' else 'Entwickle Suchstrategie...'}"}) + "\n"
 
                     system_prompt, user_prompt = build_think_prompt(
                         user_query=user_query,
@@ -1495,6 +1617,9 @@ async def research_academic(request: AcademicResearchRequest):
                     )
 
                     think_response = call_llm(system_prompt, user_prompt, timeout=60)
+                    # Flush logs after LLM call
+                    for log_event in flush_log_buffer():
+                        yield log_event
 
                     if not think_response:
                         yield json.dumps({
@@ -1503,8 +1628,8 @@ async def research_academic(request: AcademicResearchRequest):
                             "point_number": global_point_index,
                             "total_points": total_points,
                             "skipped": True,
-                            "skip_reason": "Think fehlgeschlagen",
-                            "key_learnings": "Übersprungen"
+                            "skip_reason": "Think failed" if lang == "en" else "Think fehlgeschlagen",
+                            "key_learnings": "Skipped" if lang == "en" else "Übersprungen"
                         }) + "\n"
                         continue
 
@@ -1517,13 +1642,13 @@ async def research_academic(request: AcademicResearchRequest):
                             "point_number": global_point_index,
                             "total_points": total_points,
                             "skipped": True,
-                            "skip_reason": "Keine Suchqueries",
-                            "key_learnings": "Übersprungen"
+                            "skip_reason": "No search queries" if lang == "en" else "Keine Suchqueries",
+                            "key_learnings": "Skipped" if lang == "en" else "Übersprungen"
                         }) + "\n"
                         continue
 
                     # --- STEP B: Search ---
-                    yield json.dumps({"type": "status", "message": f"{punkt_label} Durchsuche Google..."}) + "\n"
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} {'Searching Google...' if lang == 'en' else 'Durchsuche Google...'}"}) + "\n"
 
                     search_results_dict = await _execute_all_searches_async(search_queries, results_per_query=20)
                     await _close_google_session()
@@ -1544,7 +1669,7 @@ async def research_academic(request: AcademicResearchRequest):
                     search_results_text = "\n".join(formatted_results)
 
                     # --- STEP C: Pick URLs ---
-                    yield json.dumps({"type": "status", "message": f"{punkt_label} Wähle Quellen..."}) + "\n"
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} {'Selecting sources...' if lang == 'en' else 'Wähle Quellen...'}"}) + "\n"
 
                     system_prompt, user_prompt = build_pick_urls_prompt(
                         user_query=user_query,
@@ -1555,6 +1680,9 @@ async def research_academic(request: AcademicResearchRequest):
                     )
 
                     pick_response = call_llm(system_prompt, user_prompt, timeout=60)
+                    # Flush logs after LLM call
+                    for log_event in flush_log_buffer():
+                        yield log_event
                     selected_urls = parse_pick_urls_response(pick_response) if pick_response else []
 
                     if not selected_urls:
@@ -1563,13 +1691,13 @@ async def research_academic(request: AcademicResearchRequest):
                     yield json.dumps({
                         "type": "sources",
                         "urls": selected_urls,
-                        "message": f"{punkt_label} {len(selected_urls)} Quellen"
+                        "message": f"{punkt_label} {len(selected_urls)} {'sources' if lang == 'en' else 'Quellen'}"
                     }) + "\n"
 
                     bereich_sources.extend(selected_urls)
 
                     # --- STEP D: Scrape ---
-                    yield json.dumps({"type": "status", "message": f"{punkt_label} Lese Quellen..."}) + "\n"
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} {'Reading sources...' if lang == 'en' else 'Lese Quellen...'}"}) + "\n"
 
                     scraped_contents = await scrape_urls_parallel(selected_urls)
 
@@ -1585,7 +1713,7 @@ async def research_academic(request: AcademicResearchRequest):
                         continue
 
                     # --- STEP E: Dossier ---
-                    yield json.dumps({"type": "status", "message": f"{punkt_label} Erstelle Dossier..."}) + "\n"
+                    yield json.dumps({"type": "status", "message": f"{punkt_label} {'Creating dossier...' if lang == 'en' else 'Erstelle Dossier...'}"}) + "\n"
 
                     system_prompt, user_prompt = build_dossier_prompt(
                         user_query=user_query,
@@ -1595,6 +1723,9 @@ async def research_academic(request: AcademicResearchRequest):
                     )
 
                     dossier_response = call_llm(system_prompt, user_prompt, timeout=120)
+                    # Flush logs after LLM call
+                    for log_event in flush_log_buffer():
+                        yield log_event
 
                     if not dossier_response:
                         continue
@@ -1621,7 +1752,7 @@ async def research_academic(request: AcademicResearchRequest):
                         "point_title": current_point,
                         "point_number": global_point_index,
                         "total_points": total_points,
-                        "key_learnings": key_learnings or "Keine Key Learnings",
+                        "key_learnings": key_learnings or ("No key learnings" if lang == "en" else "Keine Key Learnings"),
                         "dossier_full": dossier_text,
                         "sources": dossier_urls
                     }) + "\n"
@@ -1632,7 +1763,7 @@ async def research_academic(request: AcademicResearchRequest):
                 if bereich_dossiers:
                     yield json.dumps({
                         "type": "status",
-                        "message": f"🧠 Synthese für Bereich: {bereich_titel}..."
+                        "message": f"🧠 {'Synthesis for area:' if lang == 'en' else 'Synthese für Bereich:'} {bereich_titel}..."
                     }) + "\n"
 
                     # Echter LLM Call für Bereichs-Synthese
@@ -1650,6 +1781,9 @@ async def research_academic(request: AcademicResearchRequest):
                         BEREICHS_SYNTHESIS_TIMEOUT,
                         16000
                     )
+                    # Flush logs after Bereichs-Synthese
+                    for log_event in flush_log_buffer():
+                        yield log_event
 
                     if not bereich_synthese:
                         # Fallback: Dossiers zusammenkleben
@@ -1684,7 +1818,7 @@ async def research_academic(request: AcademicResearchRequest):
             if all_bereichs_synthesen:
                 yield json.dumps({
                     "type": "meta_synthesis_start",
-                    "message": "🔮 Academic Conclusion: Finde Querverbindungen, Muster, die Lösung...",
+                    "message": "🔮 Academic Conclusion: Finding cross-connections, patterns, the solution..." if lang == "en" else "🔮 Academic Conclusion: Finde Querverbindungen, Muster, die Lösung...",
                     "bereiche_count": len(all_bereichs_synthesen),
                     "total_sources": len(source_registry)
                 }) + "\n"
@@ -1706,9 +1840,12 @@ async def research_academic(request: AcademicResearchRequest):
                     ACADEMIC_CONCLUSION_TIMEOUT,
                     32000
                 )
+                # Flush logs after Academic Conclusion
+                for log_event in flush_log_buffer():
+                    yield log_event
 
                 if not academic_conclusion:
-                    academic_conclusion = "# Conclusion\n\nConclusion-Synthese fehlgeschlagen."
+                    academic_conclusion = "# Conclusion\n\nConclusion synthesis failed." if lang == "en" else "# Conclusion\n\nConclusion-Synthese fehlgeschlagen."
 
                 # === FINAL DOCUMENT ZUSAMMENBAUEN ===
                 final_document = f"# {user_query[:100]}{'...' if len(user_query) > 100 else ''}\n\n"
@@ -1724,18 +1861,22 @@ async def research_academic(request: AcademicResearchRequest):
 
                 # Klarer Trenner vor Conclusion
                 final_document += f"\n{'█' * 60}\n"
-                final_document += "# 🔮 QUERVERBINDUNGEN & CONCLUSION\n"
+                final_document += "# 🔮 CROSS-CONNECTIONS & CONCLUSION\n" if lang == "en" else "# 🔮 QUERVERBINDUNGEN & CONCLUSION\n"
                 final_document += f"{'█' * 60}\n\n"
                 final_document += academic_conclusion
                 # Quellenverzeichnis wird vom Frontend aus source_registry gerendert - NICHT hier!
 
             else:
-                final_document = "Keine Bereiche erfolgreich recherchiert."
+                final_document = "No areas successfully researched." if lang == "en" else "Keine Bereiche erfolgreich recherchiert."
 
             # === DONE ===
             duration = time.time() - start_time
 
-            yield json.dumps({"type": "status", "message": f"Academic Research abgeschlossen in {duration:.1f}s"}) + "\n"
+            yield json.dumps({"type": "status", "message": t("academic_complete", lang, duration=f"{duration:.1f}")}) + "\n"
+
+            # Flush any remaining logs before done
+            for log_event in flush_log_buffer():
+                yield log_event
 
             yield json.dumps({
                 "type": "done",
@@ -1752,6 +1893,9 @@ async def research_academic(request: AcademicResearchRequest):
 
         except Exception as e:
             logger.error(f"Academic Research failed: {e}", exc_info=True)
+            # Flush logs to capture error details
+            for log_event in flush_log_buffer():
+                yield log_event
             yield json.dumps({"type": "error", "message": "Academic research failed. Please try again."}) + "\n"
 
     return StreamingResponse(

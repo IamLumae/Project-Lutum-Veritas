@@ -529,15 +529,17 @@ export function Chat() {
             const sourcesMsg: Message = {
               id: crypto.randomUUID(),
               role: "assistant",
-              content: `Ich habe ${urls.length} relevanten Quellen gefunden:`,
+              content: language === 'de' ? `Ich habe ${urls.length} relevante Quellen gefunden:` : `Found ${urls.length} relevant sources:`,
               timestamp: new Date().toISOString(),
               type: "sources",
               sources: urls,
             };
             addMessage(sessionId, sourcesMsg);
           },
+          undefined,  // onLog - not used in pipeline
           modelSize,
-          academicMode
+          academicMode,
+          language
         );
 
         // Session-Titel vom LLM
@@ -754,8 +756,10 @@ export function Chat() {
           };
           addMessage(sessionId, metaMsg);
         },
+        undefined,  // onLog - not used currently
         settings.workModel,
-        settings.finalModel
+        settings.finalModel,
+        language
       );
 
       // Ergebnis verarbeiten
@@ -856,10 +860,12 @@ export function Chat() {
         };
         addMessage(sessionId, synthMsg);
       },
+      undefined,  // onLog - not used currently
       modelSize,
       academicMode,
       settings.workModel,
-      settings.finalModel
+      settings.finalModel,
+      language
     );
 
     // Finale Response

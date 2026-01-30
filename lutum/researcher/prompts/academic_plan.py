@@ -157,13 +157,24 @@ Frage: "Ist Kernfusion eine realistische Energiequelle?"
 """
 
 
-def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 3000) -> Optional[str]:
-    """Ruft LLM via OpenRouter auf."""
+def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 3000) -> tuple[Optional[str], Optional[str]]:
+    """
+    Ruft LLM via OpenRouter auf.
+
+    Returns:
+        Tuple (response_text, error_message)
+        - Success: (text, None)
+        - Failure: (None, error_string)
+    """
     try:
+        api_key = get_api_key()
+        if not api_key:
+            return None, "No API key configured"
+
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {get_api_key()}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -180,20 +191,24 @@ def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 3000) -> O
 
         result = response.json()
 
+        # Log full response for debugging
+        logger.info(f"[ACADEMIC PLAN] OpenRouter response status: {response.status_code}")
+
         if "choices" not in result:
-            logger.error(f"LLM error: {result}")
-            return None
+            error_msg = result.get("error", {}).get("message", str(result))
+            logger.error(f"LLM error: {error_msg}")
+            return None, f"OpenRouter error: {error_msg}"
 
         answer = result["choices"][0]["message"]["content"]
         logger.info(f"[ACADEMIC PLAN] RAW LLM RESPONSE:\n{answer[:2000]}...")
-        return answer
+        return answer, None
 
     except requests.Timeout:
-        logger.error("LLM timeout")
-        return None
+        logger.error("LLM timeout after 90s")
+        return None, "LLM request timed out (90s)"
     except Exception as e:
-        logger.error(f"LLM call failed: {e}")
-        return None
+        logger.error(f"LLM call failed: {e}", exc_info=True)
+        return None, f"LLM call failed: {str(e)}"
 
 
 def create_academic_plan(context: ContextState) -> dict:
@@ -232,10 +247,13 @@ Antworte in der Sprache der ursprünglichen Anfrage!"""
 
         logger.debug(f"Academic plan prompt length: {len(user_prompt)} chars")
 
-        raw_response = _call_llm(ACADEMIC_PLAN_SYSTEM_PROMPT, user_prompt)
+        raw_response, llm_error = _call_llm(ACADEMIC_PLAN_SYSTEM_PROMPT, user_prompt)
+
+        if llm_error:
+            return {"error": llm_error, "bereiche": {}}
 
         if not raw_response:
-            return {"error": "LLM call failed", "bereiche": {}}
+            return {"error": "Empty response from LLM", "bereiche": {}}
 
         # Bereiche parsen
         bereiche = parse_academic_plan(raw_response)
