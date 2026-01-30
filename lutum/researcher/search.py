@@ -158,30 +158,44 @@ def _format_results_for_llm(search_results: dict[str, list[dict]]) -> str:
 
 
 # === LLM PROMPT (Query-Aware + Diversified) ===
-GET_INITIAL_DATA_PROMPT = """You are an expert in source selection.
+GET_INITIAL_DATA_PROMPT = """You select URLs from search results.
 
-## CRITICAL: QUERY-AWARENESS (MANDATORY!)
+═══════════════════════════════════════════════════════════════════
+                    OUTPUT FORMAT (MANDATORY!)
+═══════════════════════════════════════════════════════════════════
+
+RULE 1: NO ANALYSIS. NO EXPLANATION. ONLY URLS.
+RULE 2: Start IMMEDIATELY with "=== SELECTED ===" - NO text before!
+RULE 3: Each line: "url N: https://..." - nothing else.
+RULE 4: EXACTLY 10 URLs. Not 3, not 5, not 9 - exactly 10.
+
+═══════════════════════════════════════════════════════════════════
+                    QUERY AWARENESS (MANDATORY!)
+═══════════════════════════════════════════════════════════════════
 
 Adapt your selection strategy to the TASK:
-- If the user searches for "unknown/small/niche/experimental" → prefer LESS obvious sources, not the ones with most stars
-- If the user searches for "established/enterprise/proven/production-ready" → prefer well-known, highly-referenced sources
-- If the user searches for "academic/scientific" → prioritize papers and research
-- If the user searches for "practical/hands-on/tutorial" → prioritize code examples and guides
+- "unknown/small/niche/experimental" → LESS obvious sources
+- "established/enterprise/proven/production-ready" → known, highly-referenced sources
+- "academic/scientific" → prioritize papers and research
+- "practical/hands-on/tutorial" → prioritize code examples and guides
 
-## DIVERSIFICATION (MANDATORY!)
+═══════════════════════════════════════════════════════════════════
+                    DIVERSIFICATION (MANDATORY!)
+═══════════════════════════════════════════════════════════════════
 
 Select URLs from DIFFERENT perspectives:
 - Not 5x GitHub, but: GitHub + Reddit + Paper + Blog + Docs
 - Not 5x the same topic, but: cover different aspects
 
-## SELECTION CRITERIA
+SOURCE MIX (distribution for 10 URLs):
+- 2-3x Primary: Official docs, company blogs, papers
+- 2-3x Community: Reddit, HN, forums, Stack Overflow
+- 2-3x Practical: Tutorials, Medium, Dev.to, guides
+- 2-3x Analysis: Comparisons, benchmarks, reviews
 
-1. **Relevance**: Does the source fit the task?
-2. **Quality**: Expert sources > blogs > forums
-3. **Recency**: Prefer newer sources
-4. **Variety**: Cover different perspectives
-
-## SOURCE RANKING
+═══════════════════════════════════════════════════════════════════
+                    SOURCE RANKING
+═══════════════════════════════════════════════════════════════════
 
 **High quality:** GitHub repos, papers (arxiv), official docs, expert blogs
 **Medium quality:** Medium/Dev.to, Reddit (if substantial), Stack Overflow
@@ -199,25 +213,19 @@ SEARCH RESULTS:
 
 ---
 
-ALWAYS select EXACTLY 10 URLs. Not 3, not 5 - exactly 10!
+CRITICAL: Start IMMEDIATELY with "=== SELECTED ===" - NO text before!
 
-MANDATORY MIX (all 10 slots must be filled):
-- 2-3 Official sources (docs, announcements, company blogs)
-- 2-3 Community discussions (Reddit, HN, forums)
-- 2-3 Comparison articles, reviews, or analysis pieces
-- 2-3 Technical deep-dives, papers, or expert content
-
-FORMAT (fill ALL 10):
-url 1: <url>
-url 2: <url>
-url 3: <url>
-url 4: <url>
-url 5: <url>
-url 6: <url>
-url 7: <url>
-url 8: <url>
-url 9: <url>
-url 10: <url>
+=== SELECTED ===
+url 1: https://example.com/1
+url 2: https://example.com/2
+url 3: https://example.com/3
+url 4: https://example.com/4
+url 5: https://example.com/5
+url 6: https://example.com/6
+url 7: https://example.com/7
+url 8: https://example.com/8
+url 9: https://example.com/9
+url 10: https://example.com/10
 """
 
 
