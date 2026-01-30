@@ -39,7 +39,7 @@ This isn't an "alternative" to existing tools. This is proof that a solo dev wit
 
 **The bar for Deep Research is set right here.**
 
-*— Martin Gehrken, 30.01.2026*
+*— Martin Gehrken, January 30, 2026*
 
 </blockquote>
 
@@ -82,7 +82,7 @@ Your Question
 │     Cross-reference all findings into one document  │
 └─────────────────────────────────────────────────────┘
      ↓
-📄 Comprehensive Report (5.000-10.000+ words)
+📄 Comprehensive Report (5,000-10,000+ words)
 ```
 
 ### 🎓 Academic Mode
@@ -93,7 +93,7 @@ Hierarchical research with autonomous areas:
 - **Toulmin Argumentation**: Structured academic reasoning
 - **Evidence Grading**: Rate source quality (Level I-VII)
 - **Claim Audit Tables**: Confidence ratings for every claim
-- **200.000+ character outputs**: Full academic depth, no shortcuts
+- **200,000+ character outputs**: Full academic depth, no shortcuts
 
 ### 💻 Desktop App Features
 
