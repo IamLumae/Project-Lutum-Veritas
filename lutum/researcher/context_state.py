@@ -1,12 +1,12 @@
 """
 Context State Manager
 =====================
-Verwaltet den Recherche-Kontext für die LLM.
+Manages the research context for the LLM.
 
-Prinzip: JSON ist Silber, kein JSON ist Gold.
-- Intern: Python dict
-- Für LLM: Klar formatierter Text mit Markern
-- Parsing: Regex auf Text-Patterns
+Principle: JSON is silver, no JSON is gold.
+- Internal: Python dict
+- For LLM: Clearly formatted text with markers
+- Parsing: Regex on text patterns
 """
 
 from dataclasses import dataclass, field
@@ -19,22 +19,22 @@ logger = get_logger(__name__)
 @dataclass
 class ContextState:
     """
-    Recherche-Kontext der durch die Pipeline wandert.
+    Research context that travels through the pipeline.
 
-    Enthält NUR was die LLM braucht um zu wissen wo sie steht:
+    Contains ONLY what the LLM needs to know where it stands:
     - User Query
-    - Rückfragen + Antworten
-    - Aktueller Recherche-Plan
+    - Follow-up questions + answers
+    - Current research plan
 
-    KEINE Suchergebnisse, KEINE gescrapten Inhalte.
+    NO search results, NO scraped content.
     """
     user_query: str = ""
 
-    # Step 3: Rückfragen
+    # Step 3: Follow-up questions
     clarification_questions: list[str] = field(default_factory=list)
     clarification_answers: list[str] = field(default_factory=list)
 
-    # Step 4: Recherche-Plan
+    # Step 4: Research plan
     research_plan: list[str] = field(default_factory=list)
     plan_version: int = 0
 
@@ -43,52 +43,52 @@ class ContextState:
     current_step: int = 0
 
     def add_clarification(self, questions: list[str]):
-        """Rückfragen aus Step 3 hinzufügen."""
+        """Add follow-up questions from Step 3."""
         self.clarification_questions = questions
         logger.debug(f"Added {len(questions)} clarification questions")
 
     def add_answers(self, answers: list[str]):
-        """User-Antworten auf Rückfragen hinzufügen."""
+        """Add user answers to follow-up questions."""
         self.clarification_answers = answers
         logger.debug(f"Added {len(answers)} user answers")
 
     def set_plan(self, plan_points: list[str]):
-        """Recherche-Plan setzen (ersetzt alten)."""
+        """Set research plan (replaces old one)."""
         self.research_plan = plan_points
         self.plan_version += 1
         logger.debug(f"Set research plan v{self.plan_version} with {len(plan_points)} points")
 
     def format_for_llm(self) -> str:
         """
-        Formatiert den State als lesbaren Text für die LLM.
+        Formats the state as readable text for the LLM.
 
         Returns:
-            Klar strukturierter Text den die LLM versteht
+            Clearly structured text that the LLM understands
         """
         lines = []
 
-        # User Query - immer da
-        lines.append("=== DEINE AUFGABE ===")
+        # User Query - always present
+        lines.append("=== YOUR TASK ===")
         lines.append(self.user_query)
         lines.append("")
 
-        # Rückfragen falls vorhanden
+        # Follow-up questions if present
         if self.clarification_questions:
-            lines.append("=== RÜCKFRAGEN ===")
+            lines.append("=== FOLLOW-UP QUESTIONS ===")
             for i, q in enumerate(self.clarification_questions, 1):
                 lines.append(f"{i}. {q}")
             lines.append("")
 
-        # User Antworten falls vorhanden
+        # User answers if present
         if self.clarification_answers:
-            lines.append("=== USER ANTWORTEN ===")
+            lines.append("=== USER ANSWERS ===")
             for i, a in enumerate(self.clarification_answers, 1):
                 lines.append(f"{i}. {a}")
             lines.append("")
 
-        # Recherche-Plan falls vorhanden
+        # Research plan if present
         if self.research_plan:
-            lines.append(f"=== RECHERCHE-PLAN (v{self.plan_version}) ===")
+            lines.append(f"=== RESEARCH PLAN (v{self.plan_version}) ===")
             for i, point in enumerate(self.research_plan, 1):
                 lines.append(f"({i}) {point}")
             lines.append("")
@@ -97,22 +97,22 @@ class ContextState:
 
     def format_plan_for_user(self) -> str:
         """
-        Formatiert nur den Plan für die User-Anzeige.
+        Formats only the plan for user display.
 
         Returns:
-            Plan als formatierter Text
+            Plan as formatted text
         """
         if not self.research_plan:
-            return "Kein Recherche-Plan vorhanden."
+            return "No research plan available."
 
-        lines = ["**Recherche-Plan:**", ""]
+        lines = ["**Research Plan:**", ""]
         for i, point in enumerate(self.research_plan, 1):
             lines.append(f"({i}) {point}")
 
         return "\n".join(lines)
 
     def to_dict(self) -> dict:
-        """Für Serialisierung/Speicherung."""
+        """For serialization/storage."""
         return {
             "user_query": self.user_query,
             "clarification_questions": self.clarification_questions,
@@ -125,7 +125,7 @@ class ContextState:
 
     @classmethod
     def from_dict(cls, data: dict) -> "ContextState":
-        """Aus gespeichertem dict laden."""
+        """Load from saved dict."""
         state = cls()
         state.user_query = data.get("user_query", "")
         state.clarification_questions = data.get("clarification_questions", [])

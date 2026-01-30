@@ -819,12 +819,21 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
             className={`flex ${isUser ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
           >
             <div
-              className={`max-w-full sm:max-w-[90%] md:max-w-[85%] lg:max-w-[75%] rounded-2xl px-4 md:px-5 py-3 md:py-4 shadow-sm break-words ${
+              className={`relative max-w-full sm:max-w-[90%] md:max-w-[85%] lg:max-w-[75%] rounded-2xl px-4 md:px-5 py-3 md:py-4 break-words overflow-hidden ${
                 isUser
-                  ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white"
-                  : "bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border)]"
+                  ? "bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white shadow-[0_0_20px_rgba(59,130,246,0.25)] border border-blue-500/30"
+                  : "bg-gradient-to-br from-[var(--bg-secondary)] to-[#1a1a24] text-[var(--text-primary)] border border-[var(--border)] shadow-lg"
               }`}
             >
+              {/* Subtle corner accents for assistant messages */}
+              {!isUser && (
+                <>
+                  <div className="absolute top-0 left-0 w-8 h-[2px] bg-gradient-to-r from-blue-500/50 to-transparent" />
+                  <div className="absolute top-0 left-0 w-[2px] h-8 bg-gradient-to-b from-blue-500/50 to-transparent" />
+                  <div className="absolute bottom-0 right-0 w-8 h-[2px] bg-gradient-to-l from-orange-500/30 to-transparent" />
+                  <div className="absolute bottom-0 right-0 w-[2px] h-8 bg-gradient-to-t from-orange-500/30 to-transparent" />
+                </>
+              )}
               {msg.url && (
                 <div className="text-xs opacity-60 mb-3 truncate flex items-center gap-1.5">
                   <span>🔗</span>
@@ -835,16 +844,26 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
               {/* Point Summary Box - Special rendering */}
               {msg.type === "log" ? (
                 <div
-                  className={`rounded-xl border px-4 py-3 text-sm ${
+                  className={`relative overflow-hidden rounded-xl border px-4 py-3 text-sm ${
                     msg.logLevel === "error"
-                      ? "border-red-500/40 bg-red-500/10 text-red-200"
-                      : "border-amber-400/40 bg-amber-400/10 text-amber-200"
+                      ? "border-red-500/40 bg-gradient-to-r from-red-500/10 via-red-500/5 to-red-500/10"
+                      : "border-orange-500/40 bg-gradient-to-r from-orange-500/10 via-orange-500/5 to-orange-500/10"
                   }`}
                 >
-                  <div className="text-xs font-semibold uppercase tracking-wide mb-2 opacity-80">
-                    {msg.logLevel === "error" ? "Backend Error" : "Backend Warnung"}
+                  {/* Glow effect */}
+                  <div className={`absolute inset-0 ${msg.logLevel === "error" ? "bg-red-500/5" : "bg-orange-500/5"} animate-pulse`} />
+
+                  <div className="relative z-10">
+                    <div className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-2 ${
+                      msg.logLevel === "error" ? "text-red-400" : "text-orange-400"
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full ${msg.logLevel === "error" ? "bg-red-500" : "bg-orange-500"} animate-pulse`} />
+                      {msg.logLevel === "error" ? "System Error" : "System Notice"}
+                    </div>
+                    <div className={msg.logLevel === "error" ? "text-red-200" : "text-orange-200"}>
+                      <MarkdownContent content={msg.content} isUser={false} />
+                    </div>
                   </div>
-                  <MarkdownContent content={msg.content} isUser={false} />
                 </div>
               ) : msg.type === "point_summary" && msg.pointTitle ? (
                 <PointSummaryBox
@@ -956,37 +975,45 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
         );
       })}
 
-      {/* Loading Indicator - Terminal Style "Don't hide the sweat" */}
+      {/* Loading Indicator - Techno/Cyber Style */}
       {loading && (
         <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="bg-gradient-to-br from-[#0d1117] to-[#161b22] border border-[#30363d] rounded-2xl px-4 md:px-5 py-3 md:py-4 shadow-lg w-full sm:w-auto sm:min-w-[280px] sm:max-w-[500px]">
-            {/* Terminal Header */}
-            <div className="flex items-center gap-2 mb-3 pb-2 border-b border-[#30363d]">
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
-                <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
-                <div className="w-3 h-3 rounded-full bg-[#27c93f]" />
-              </div>
-              <span className="text-xs text-[#8b949e] font-mono ml-2">deep-research</span>
+          <div className="relative overflow-hidden bg-gradient-to-r from-[#0a0a12] via-[#0d0d18] to-[#0a0a12] border border-blue-500/30 rounded-xl px-5 py-4 shadow-[0_0_30px_rgba(59,130,246,0.15)] w-full sm:w-auto sm:min-w-[320px] sm:max-w-[500px]">
+            {/* Animated border glow */}
+            <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500/0 via-blue-500/20 to-blue-500/0 animate-pulse opacity-50" />
+
+            {/* Scan line effect */}
+            <div className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none">
+              <div className="absolute w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent animate-[scan_2s_linear_infinite]" />
             </div>
 
-            {/* Animated Status Line */}
-            <div className="font-mono text-sm">
-              <div className="flex items-center gap-2">
-                {/* Spinning Cog */}
-                <span className="text-green-400 animate-spin" style={{ animationDuration: "1s" }}>⚙</span>
-                <span className="text-green-400">$</span>
-                <span className="text-[#c9d1d9]">{currentStatus || t('initializing', language)}</span>
-                {/* Blinking Cursor */}
-                <span className="animate-pulse text-green-400">▋</span>
+            {/* Content */}
+            <div className="relative z-10">
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-3">
+                {/* Animated hex icon */}
+                <div className="relative w-8 h-8 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-blue-500/20 rounded-lg animate-ping" style={{ animationDuration: "2s" }} />
+                  <div className="relative w-6 h-6 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-md flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                    <span className="text-white text-xs font-bold">⚡</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-blue-400 tracking-wider uppercase">Deep Research</div>
+                  <div className="text-[10px] text-blue-400/50 font-mono">ACTIVE</div>
+                </div>
               </div>
 
-              {/* Activity Dots */}
-              <div className="mt-2 flex items-center gap-1 text-xs text-[#8b949e]">
-                <span className="animate-pulse" style={{ animationDelay: "0ms" }}>●</span>
-                <span className="animate-pulse" style={{ animationDelay: "200ms" }}>●</span>
-                <span className="animate-pulse" style={{ animationDelay: "400ms" }}>●</span>
-                <span className="ml-2 opacity-60">{t('processingData', language)}</span>
+              {/* Status */}
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-orange-400 font-mono">›</span>
+                <span className="text-gray-200 font-medium">{currentStatus || t('initializing', language)}</span>
+                <span className="animate-pulse text-cyan-400">_</span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mt-3 h-1 bg-[#1a1a2a] rounded-full overflow-hidden">
+                <div className="h-full w-1/3 bg-gradient-to-r from-blue-500 via-cyan-400 to-blue-500 rounded-full animate-[progress_1.5s_ease-in-out_infinite]" />
               </div>
             </div>
           </div>

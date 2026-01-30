@@ -1,14 +1,13 @@
 """
 Search Module
 =============
-Step 2: Führt Queries auf 3 Engines aus für Diversifizierung.
+Step 2: Executes queries on search engines for diversification.
 
-Queries → DuckDuckGo + Google + Bing → Top Results → LLM picks URLs
+Queries → DuckDuckGo → Top Results → LLM picks URLs
 
-NUTZT:
-- duckduckgo-search Library für DDG
-- search-engines-scraper für Google & Bing
-Kein Browser nötig, stabil, schnell.
+USES:
+- duckduckgo-search library for DDG
+No browser needed, stable, fast.
 """
 
 import asyncio
@@ -23,38 +22,37 @@ from lutum.core.llm_client import call_chat_completion
 logger = get_logger(__name__)
 
 
-# === MULTI-ENGINE SEARCH ===
-# 3 Engines für Diversifizierung: DDG, Google, Bing
+# === SEARCH ENGINE ===
 
 def _search_ddg_sync(query: str, max_results: int = 20) -> list[dict]:
     """
-    Führt eine DuckDuckGo Suche aus (sync).
-    Nutzt ddgs Library (neue Version von duckduckgo-search).
+    Executes a DuckDuckGo search (sync).
+    Uses ddgs library (new version of duckduckgo-search).
 
     Args:
-        query: Suchbegriff
-        max_results: Anzahl Ergebnisse
+        query: Search term
+        max_results: Number of results
 
     Returns:
-        Liste von {title, url, snippet}
+        List of {title, url, snippet}
     """
     try:
         from ddgs import DDGS
 
-        # Query bereinigen - keine Quotes, die verwirren DDG
+        # Clean query - no quotes, they confuse DDG
         clean_query = query.strip().replace('"', '').replace("'", '')
         logger.debug(f"DDG search: {clean_query[:40]}...")
 
-        # Suche ausführen mit neuer ddgs API
+        # Execute search with new ddgs API
         with DDGS() as ddgs:
             results = list(ddgs.text(
-                clean_query,  # Positional argument, nicht keyword!
+                clean_query,  # Positional argument, not keyword!
                 region="wt-wt",  # Worldwide
                 safesearch="moderate",
                 max_results=max_results
             ))
 
-        # Zu unserem Format konvertieren
+        # Convert to our format
         formatted = []
         for r in results:
             formatted.append({
@@ -72,105 +70,23 @@ def _search_ddg_sync(query: str, max_results: int = 20) -> list[dict]:
 
 
 async def _search_ddg_async(query: str, max_results: int = 20) -> list[dict]:
-    """Async wrapper für DDG search."""
+    """Async wrapper for DDG search."""
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _search_ddg_sync, query, max_results)
 
 
-def _search_google_sync(query: str, max_results: int = 20) -> list[dict]:
-    """
-    Führt eine Google Suche aus (sync).
-    Nutzt search-engines-scraper Library.
-    """
-    try:
-        from search_engines import Google
-
-        clean_query = query.strip().replace('"', '').replace("'", '')
-        logger.debug(f"Google search: {clean_query[:40]}...")
-
-        engine = Google()
-        results = engine.search(clean_query, pages=1)
-
-        formatted = []
-        for i, link in enumerate(results.links()):
-            if i >= max_results:
-                break
-            # Titles und Snippets aus results extrahieren
-            title = results.titles()[i] if i < len(results.titles()) else ""
-            snippet = results.text()[i] if i < len(results.text()) else ""
-            formatted.append({
-                "title": title,
-                "url": link,
-                "snippet": snippet
-            })
-
-        logger.info(f"Google '{clean_query[:30]}...': {len(formatted)} results")
-        return formatted
-
-    except Exception as e:
-        logger.warning(f"Google search failed: {query[:30]} - {e}")
-        return []
-
-
-def _search_bing_sync(query: str, max_results: int = 20) -> list[dict]:
-    """
-    Führt eine Bing Suche aus (sync).
-    Nutzt search-engines-scraper Library.
-    """
-    try:
-        from search_engines import Bing
-
-        clean_query = query.strip().replace('"', '').replace("'", '')
-        logger.debug(f"Bing search: {clean_query[:40]}...")
-
-        engine = Bing()
-        results = engine.search(clean_query, pages=1)
-
-        formatted = []
-        for i, link in enumerate(results.links()):
-            if i >= max_results:
-                break
-            title = results.titles()[i] if i < len(results.titles()) else ""
-            snippet = results.text()[i] if i < len(results.text()) else ""
-            formatted.append({
-                "title": title,
-                "url": link,
-                "snippet": snippet
-            })
-
-        logger.info(f"Bing '{clean_query[:30]}...': {len(formatted)} results")
-        return formatted
-
-    except Exception as e:
-        logger.warning(f"Bing search failed: {query[:30]} - {e}")
-        return []
-
-
-async def _search_google_async(query: str, max_results: int = 20) -> list[dict]:
-    """Async wrapper für Google search."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _search_google_sync, query, max_results)
-
-
-async def _search_bing_async(query: str, max_results: int = 20) -> list[dict]:
-    """Async wrapper für Bing search."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _search_bing_sync, query, max_results)
-
-
 async def _execute_all_searches_async(queries: list[str], results_per_query: int = 20) -> dict[str, list[dict]]:
     """
-    Führt alle Queries auf 3 Engines aus für Diversifizierung:
-    DuckDuckGo, Google, Bing
+    Executes all queries on DDG.
 
-    Kein Browser nötig - Libraries machen alles!
+    No browser needed - library handles everything!
 
     Args:
-        queries: Liste der Suchbegriffe
-        results_per_query: Ergebnisse pro Query
+        queries: List of search terms
+        results_per_query: Results per query
 
     Returns:
-        Dict {query: [results]} - Results von allen Engines gemerged & dedupliziert
+        Dict {query: [results]}
     """
     import time as search_time
 
@@ -179,14 +95,14 @@ async def _execute_all_searches_async(queries: list[str], results_per_query: int
 
     all_results = {}
 
-    # Nur DDG - Google/Bing sind unzuverlässig (0 results, redirect URLs)
+    # Only DDG - Google/Bing are unreliable (0 results, redirect URLs)
     for i, query in enumerate(queries, 1):
         logger.info(f"[{i}/{len(queries)}] DDG: {query[:40]}...")
         results = await _search_ddg_async(query, results_per_query)
         all_results[query] = results
         logger.info(f"[{i}/{len(queries)}] {len(results)} results")
 
-        # Längere Pause zwischen Queries um Rate-Limiting zu vermeiden
+        # Longer pause between queries to avoid rate-limiting
         if i < len(queries):
             await asyncio.sleep(1.5)
 
@@ -197,9 +113,9 @@ async def _execute_all_searches_async(queries: list[str], results_per_query: int
     return all_results
 
 
-# Legacy function - wird von research.py aufgerufen
+# Legacy function - called by research.py
 async def _close_google_session():
-    """Legacy - nicht mehr nötig da kein Browser verwendet wird."""
+    """Legacy - no longer needed as no browser is used."""
     logger.debug("_close_google_session called (no-op, using duckduckgo-search library)")
     pass
 
@@ -208,13 +124,13 @@ async def _close_google_session():
 
 def _format_results_for_llm(search_results: dict[str, list[dict]]) -> str:
     """
-    Formatiert Suchergebnisse für LLM-Prompt.
+    Formats search results for LLM prompt.
 
     Args:
         search_results: Dict {query: [results]}
 
     Returns:
-        Formatierter String
+        Formatted string
     """
     logger.debug("Formatting search results for LLM")
 
@@ -225,7 +141,7 @@ def _format_results_for_llm(search_results: dict[str, list[dict]]) -> str:
             lines.append(f"=== Query: {query} ===")
 
             if not results:
-                lines.append("(keine Ergebnisse)")
+                lines.append("(no results)")
             else:
                 for i, r in enumerate(results, 1):
                     lines.append(f"{i}. {r['title']}")
@@ -238,55 +154,69 @@ def _format_results_for_llm(search_results: dict[str, list[dict]]) -> str:
 
     except Exception as e:
         logger.error(f"Result formatting failed: {e}")
-        return "Fehler beim Formatieren der Ergebnisse."
+        return "Error formatting results."
 
 
-# === LLM PROMPT (Query-Aware + Diversifiziert) ===
-GET_INITIAL_DATA_PROMPT = """Du bist ein Experte für Quellenauswahl.
+# === LLM PROMPT (Query-Aware + Diversified) ===
+GET_INITIAL_DATA_PROMPT = """You are an expert in source selection.
 
-## KRITISCH: QUERY-AWARENESS (PFLICHT!)
+## CRITICAL: QUERY-AWARENESS (MANDATORY!)
 
-Passe deine Auswahlstrategie an den AUFTRAG an:
-- Wenn der User "unbekannte/kleine/nische/experimental" sucht → bevorzuge WENIGER offensichtliche Quellen, nicht die mit den meisten Stars
-- Wenn der User "etablierte/Enterprise/bewährt/production-ready" sucht → bevorzuge bekannte, viel-referenzierte Quellen
-- Wenn der User "akademisch/wissenschaftlich" sucht → priorisiere Papers und Forschung
-- Wenn der User "praktisch/hands-on/tutorial" sucht → priorisiere Code-Beispiele und Guides
+Adapt your selection strategy to the TASK:
+- If the user searches for "unknown/small/niche/experimental" → prefer LESS obvious sources, not the ones with most stars
+- If the user searches for "established/enterprise/proven/production-ready" → prefer well-known, highly-referenced sources
+- If the user searches for "academic/scientific" → prioritize papers and research
+- If the user searches for "practical/hands-on/tutorial" → prioritize code examples and guides
 
-## DIVERSIFIZIERUNG (PFLICHT!)
+## DIVERSIFICATION (MANDATORY!)
 
-Wähle URLs aus VERSCHIEDENEN Perspektiven:
-- Nicht 5x GitHub, sondern: GitHub + Reddit + Paper + Blog + Docs
-- Nicht 5x dasselbe Thema, sondern: verschiedene Aspekte abdecken
+Select URLs from DIFFERENT perspectives:
+- Not 5x GitHub, but: GitHub + Reddit + Paper + Blog + Docs
+- Not 5x the same topic, but: cover different aspects
 
-## AUSWAHLKRITERIEN
+## SELECTION CRITERIA
 
-1. **Relevanz**: Passt die Quelle zum Auftrag?
-2. **Qualität**: Fachquellen > Blogs > Foren
-3. **Aktualität**: Neuere Quellen bevorzugen
-4. **Vielfalt**: Verschiedene Perspektiven abdecken
+1. **Relevance**: Does the source fit the task?
+2. **Quality**: Expert sources > blogs > forums
+3. **Recency**: Prefer newer sources
+4. **Variety**: Cover different perspectives
 
-## QUELLEN-RANKING
+## SOURCE RANKING
 
-**Hochwertig:** GitHub Repos, Papers (arxiv), Offizielle Docs, Experten-Blogs
-**Mittelwertig:** Medium/Dev.to, Reddit (wenn substantiell), Stack Overflow
-**Vermeiden:** Generische Newsseiten, SEO-Spam, Veraltetes
+**High quality:** GitHub repos, papers (arxiv), official docs, expert blogs
+**Medium quality:** Medium/Dev.to, Reddit (if substantial), Stack Overflow
+**Avoid:** Generic news sites, SEO spam, outdated content
 
 ---
 
-URSPRÜNGLICHER AUFTRAG:
+ORIGINAL TASK:
 {user_message}
 
 {context_block}
 
-SUCHERGEBNISSE:
+SEARCH RESULTS:
 {search_results}
 
 ---
 
-Wähle die besten URLs (max 10). FORMAT:
+ALWAYS select EXACTLY 10 URLs. Not 3, not 5 - exactly 10!
+
+MANDATORY MIX (all 10 slots must be filled):
+- 2-3 Official sources (docs, announcements, company blogs)
+- 2-3 Community discussions (Reddit, HN, forums)
+- 2-3 Comparison articles, reviews, or analysis pieces
+- 2-3 Technical deep-dives, papers, or expert content
+
+FORMAT (fill ALL 10):
 url 1: <url>
 url 2: <url>
-...
+url 3: <url>
+url 4: <url>
+url 5: <url>
+url 6: <url>
+url 7: <url>
+url 8: <url>
+url 9: <url>
 url 10: <url>
 """
 
@@ -298,27 +228,27 @@ def _call_llm_pick_urls(
     max_tokens: int = 1500
 ) -> Optional[str]:
     """
-    LLM wählt beste URLs aus Suchergebnissen (Query-Aware + Kontext).
+    LLM selects best URLs from search results (Query-Aware + Context).
 
     Args:
-        user_message: Ursprüngliche User-Anfrage
-        search_results: Formatierte Suchergebnisse
-        previous_learnings: Key Learnings aus vorherigen Dossiers (optional)
-        max_tokens: Max Response Tokens
+        user_message: Original user request
+        search_results: Formatted search results
+        previous_learnings: Key learnings from previous dossiers (optional)
+        max_tokens: Max response tokens
 
     Returns:
-        LLM Response oder None
+        LLM response or None
     """
     logger.debug("Calling LLM to pick URLs...")
 
-    # Kontext-Block bauen wenn Learnings vorhanden
+    # Build context block if learnings available
     if previous_learnings and len(previous_learnings) > 0:
         learnings_text = "\n".join(f"- {learning}" for learning in previous_learnings)
         context_block = f"""
-BISHERIGE ERKENNTNISSE (aus vorherigen Recherchen):
+PREVIOUS FINDINGS (from earlier research):
 {learnings_text}
 
-WICHTIG: Wähle URLs die NEUE Informationen liefern, nicht dieselben nochmal!
+IMPORTANT: Select URLs that provide NEW information, not the same again!
 """
     else:
         context_block = ""
@@ -352,14 +282,14 @@ WICHTIG: Wähle URLs die NEUE Informationen liefern, nicht dieselben nochmal!
 
 def _parse_urls(response: str) -> list[str]:
     """
-    Parst URL-Liste aus LLM Response.
-    Flexibler Parser - findet ALLE URLs in der Response.
+    Parses URL list from LLM response.
+    Flexible parser - finds ALL URLs in the response.
 
     Args:
-        response: LLM Response (beliebiges Format)
+        response: LLM response (any format)
 
     Returns:
-        Liste der URLs (dedupliziert, max 10)
+        List of URLs (deduplicated, max 10)
     """
     import re
     logger.debug("Parsing URLs from LLM response")
@@ -369,12 +299,12 @@ def _parse_urls(response: str) -> list[str]:
     seen = set()
 
     try:
-        # Finde ALLE URLs mit Regex
+        # Find ALL URLs with regex
         url_pattern = r'https?://[^\s<>"\')\]]+[^\s<>"\')\].,;:!?]'
         matches = re.findall(url_pattern, response)
 
         for url in matches:
-            # Bereinige URL (manchmal hängt Müll dran)
+            # Clean URL (sometimes garbage hangs on)
             url = url.rstrip('.,;:!?')
             if url not in seen and len(urls) < 10:
                 urls.append(url)
@@ -396,24 +326,24 @@ async def get_initial_data(
     previous_learnings: list[str] | None = None
 ) -> dict:
     """
-    Step 2: Sucht Queries und LLM wählt beste URLs (async, Query-Aware).
+    Step 2: Searches queries and LLM selects best URLs (async, Query-Aware).
 
     Args:
-        user_message: Ursprüngliche User-Anfrage
-        queries: Liste der Search Queries aus Step 1
-        previous_learnings: Key Learnings aus vorherigen Dossiers (optional, für Kontext)
+        user_message: Original user request
+        queries: List of search queries from Step 1
+        previous_learnings: Key learnings from previous dossiers (optional, for context)
 
     Returns:
-        Dict mit:
-            - urls_picked: Liste der ausgewählten URLs
-            - search_results_raw: Rohe Suchergebnisse
-            - llm_response: Rohe LLM Antwort
-            - error: Fehlermeldung falls aufgetreten
+        Dict with:
+            - urls_picked: List of selected URLs
+            - search_results_raw: Raw search results
+            - llm_response: Raw LLM response
+            - error: Error message if occurred
     """
     logger.info(f"get_initial_data called: {len(queries)} queries")
 
     try:
-        # Searches ausführen (async) - 20 results pro query für ~50-100 total
+        # Execute searches (async) - 20 results per query for ~50-100 total
         search_results = await _execute_all_searches_async(queries, results_per_query=20)
 
         if not search_results or all(len(r) == 0 for r in search_results.values()):
@@ -422,13 +352,13 @@ async def get_initial_data(
                 "urls_picked": [],
                 "search_results_raw": {},
                 "llm_response": None,
-                "error": "Keine Suchergebnisse gefunden"
+                "error": "No search results found"
             }
 
-        # Für LLM formatieren
+        # Format for LLM
         formatted_results = _format_results_for_llm(search_results)
 
-        # LLM picks URLs (mit Kontext wenn vorhanden)
+        # LLM picks URLs (with context if available)
         llm_response = _call_llm_pick_urls(user_message, formatted_results, previous_learnings)
 
         if not llm_response:
@@ -439,7 +369,7 @@ async def get_initial_data(
                 "error": "LLM call failed"
             }
 
-        # URLs parsen
+        # Parse URLs
         urls = _parse_urls(llm_response)
 
         logger.info(f"Initial data complete: {len(urls)} URLs picked")
@@ -480,7 +410,7 @@ if __name__ == "__main__":
         for i, url in enumerate(result["urls_picked"], 1):
             print(f"  {i}. {url}")
 
-    if result["error"]:
-        logger.error("Error: %s", result["error"])
+        if result["error"]:
+            logger.error("Error: %s", result["error"])
 
     asyncio.run(test())

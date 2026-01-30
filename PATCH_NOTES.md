@@ -1,5 +1,69 @@
 # Lutum Veritas - Patch Notes
 
+## v1.2.3 (2026-01-30)
+
+### 🌐 Language Detection Fix
+
+**Root Cause Found & Fixed**
+- `context_state.py` hatte deutsche Header (`=== DEINE AUFGABE ===`, `=== RÜCKFRAGEN ===`)
+- Diese wurden vor jeden LLM-Call geprefixed → LLM dachte "deutscher Kontext = deutsche Antwort"
+- Fix: Alle Header auf Englisch (`=== YOUR TASK ===`, `=== FOLLOW-UP QUESTIONS ===`, etc.)
+
+**Zusätzliche Prompt-Fixes:**
+- `clarify.py`, `plan.py`, `overview.py`, `search.py` komplett auf Englisch
+- Jeder Prompt endet mit: `CRITICAL: Respond in SAME LANGUAGE as user query`
+
+### 🎨 UI Redesign - Techno/Cyber Theme
+
+**Loading Indicator (komplett neu):**
+- Weg mit Mac-Terminal-Dots, rein mit Cyber-Style
+- Blauer Glow-Border mit Scan-Line Animation
+- Animiertes Hex-Icon mit Ping-Effekt
+- Gradient Progress-Bar
+- Orange `›` Prompt-Character
+
+**Log Messages (Warnings/Errors):**
+- Gradient Backgrounds statt flat colors
+- Pulsing Glow-Effekte
+- Animierter Status-Dot
+- Labels: "System Error" / "System Notice"
+
+**Message Boxes:**
+- User: Enhanced blue gradient mit Glow-Shadow
+- Assistant: Subtile Corner-Accents (blau oben-links, orange unten-rechts)
+
+**CSS Animations hinzugefügt:**
+- `scan` - Scan-Line Effekt (top-to-bottom)
+- `progress` - Shimmer Progress-Bar
+- `glow-pulse` - Border Glow
+- `cursor-blink` - Typing Cursor
+- `hex-rotate` - Icon Rotation
+
+### 🔍 URL Picker Fix
+
+**Problem:** LLM pickte nur 3 URLs statt 10
+- Alter Prompt: "Select the best URLs (max 10)" → LLM interpretierte "ich kann auch weniger wählen"
+- Neuer Prompt: "ALWAYS select EXACTLY 10 URLs. Not 3, not 5 - exactly 10!"
+- Mandatory Mix definiert: 2-3 Official + 2-3 Community + 2-3 Reviews + 2-3 Technical
+
+### 📝 Technical Details
+
+**Geänderte Dateien:**
+```
+# Language Fix
+lutum/researcher/context_state.py
+lutum/researcher/clarify.py
+lutum/researcher/plan.py
+lutum/researcher/overview.py
+lutum/researcher/search.py
+
+# UI Redesign
+lutum-desktop/src/components/MessageList.tsx
+lutum-desktop/src/App.css
+```
+
+---
+
 ## v1.2.2 (2026-01-30)
 
 ### 🌍 Internationalization (i18n) Complete

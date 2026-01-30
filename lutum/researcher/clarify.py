@@ -1,9 +1,9 @@
 """
 Clarify Module
 ==============
-Step 3: Scraped Content analysieren + Rückfragen stellen.
+Step 3: Analyze scraped content + ask follow-up questions.
 
-URLs scrapen → Content + User Query an LLM → Rückfragen (wenn nötig)
+Scrape URLs → Content + User Query to LLM → Follow-up questions (if needed)
 """
 
 import asyncio
@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 def _format_scraped_for_llm(scraped: dict[str, str], max_chars_per_page: int = 3000) -> str:
     """
-    Formatiert Scrape-Ergebnisse für LLM.
+    Formats scrape results for LLM.
     """
     logger.debug(f"Formatting {len(scraped)} scraped pages for LLM")
 
@@ -27,14 +27,14 @@ def _format_scraped_for_llm(scraped: dict[str, str], max_chars_per_page: int = 3
         lines = []
 
         for i, (url, content) in enumerate(scraped.items(), 1):
-            lines.append(f"=== SEITE {i}: {url} ===")
+            lines.append(f"=== PAGE {i}: {url} ===")
 
             if content:
                 if len(content) > max_chars_per_page:
-                    content = content[:max_chars_per_page] + "\n[... gekürzt ...]"
+                    content = content[:max_chars_per_page] + "\n[... truncated ...]"
                 lines.append(content)
             else:
-                lines.append("[Konnte nicht geladen werden]")
+                lines.append("[Could not load]")
 
             lines.append("")
 
@@ -42,45 +42,45 @@ def _format_scraped_for_llm(scraped: dict[str, str], max_chars_per_page: int = 3
 
     except Exception as e:
         logger.error(f"Format scraped failed: {e}")
-        return "Fehler beim Formatieren."
+        return "Error formatting content."
 
 
 # === LLM PROMPT ===
-CLARIFY_PROMPT = """Du bist ein Research-Assistent. Der Nutzer hat einen Recherche-Auftrag gegeben.
+CLARIFY_PROMPT = """You are a research assistant. The user has given a research task.
 
-WICHTIG - SPRACHLICHE ANPASSUNG: Wenn die ursprüngliche Nutzer-Anfrage auf Englisch formuliert wurde, antworte auf Englisch. Wenn sie auf Deutsch war, antworte auf Deutsch.
+You have just performed an initial overview search and found and read the following pages.
 
-Du hast gerade eine erste Übersichtssuche durchgeführt und folgende Seiten gefunden und gelesen.
+Your task now:
+1. Understand what the user really wants
+2. Consider whether you have enough information to start
+3. If necessary: Ask up to 5 clarifying follow-up questions
 
-Deine Aufgabe jetzt:
-1. Verstehe was der Nutzer wirklich will
-2. Überlege ob du genug Informationen hast um loszulegen
-3. Wenn nötig: Stelle bis zu 5 klärende Rückfragen
-
-WICHTIG:
-- Beginne IMMER positiv und motivierend (z.B. "Hey, spannende Idee!" oder "Interessanter Auftrag!" - oder auf Englisch wenn der User Englisch schreibt)
-- Stelle NUR Fragen wenn wirklich nötig
-- Fragen sollten helfen die Recherche zu fokussieren
-- Keine Beispiele in den Fragen - der Nutzer soll frei antworten
+IMPORTANT:
+- ALWAYS begin positively and encouragingly (e.g. "Great question!" or "Interesting topic!")
+- ONLY ask questions if truly necessary
+- Questions should help focus the research
+- No examples in the questions - let the user answer freely
 
 FORMAT:
-Beginne mit 1-2 Sätzen positiver Reaktion.
-Dann wenn nötig: "Damit ich gezielt recherchieren kann, ein paar kurze Fragen:"
-Dann nummerierte Fragen (max 5).
-Wenn KEINE Fragen nötig: Sage dass du direkt loslegen kannst.
+Begin with 1-2 sentences of positive reaction.
+Then if needed: Transition to follow-up questions (e.g. "To focus my research effectively, a few quick questions:")
+Then numbered questions (max 5).
+If NO questions needed: Say that you can start right away.
 
-=== NUTZER-AUFTRAG ===
+=== USER TASK ===
 {user_message}
 
-=== GEFUNDENE INFORMATIONEN ===
+=== FOUND INFORMATION ===
 {scraped_content}
 
-Deine Antwort:"""
+CRITICAL: Your response must ALWAYS be in the SAME LANGUAGE as the user's task above. If the user wrote in German, respond in German. If in English, respond in English.
+
+Your response:"""
 
 
-def _call_llm_clarify(user_message: str, scraped_content: str, max_tokens: int = 2000) -> Tuple[Optional[str], Optional[str]]:
+def _call_llm_clarify(user_message: str, scraped_content: str, max_tokens: int = 4000) -> Tuple[Optional[str], Optional[str]]:
     """
-    LLM analysiert Scrape-Ergebnisse und stellt Rückfragen.
+    LLM analyzes scrape results and asks follow-up questions.
     """
     logger.debug("Calling LLM for clarification...")
 
@@ -110,23 +110,23 @@ def _call_llm_clarify(user_message: str, scraped_content: str, max_tokens: int =
 
 async def get_clarification(user_message: str, urls: list[str]) -> dict:
     """
-    Step 3: Scraped URLs und stellt Rückfragen.
+    Step 3: Scrape URLs and ask follow-up questions.
 
     Args:
-        user_message: Ursprünglicher User-Auftrag
-        urls: Liste der URLs aus Step 2
+        user_message: Original user task
+        urls: List of URLs from Step 2
 
     Returns:
-        Dict mit:
-            - clarification: LLM Rückfragen/Antwort
-            - scraped_content: Rohes Scrape-Ergebnis
-            - success_count: Anzahl erfolgreicher Scrapes
-            - error: Fehlermeldung falls aufgetreten
+        Dict with:
+            - clarification: LLM follow-up questions/response
+            - scraped_content: Raw scrape result
+            - success_count: Number of successful scrapes
+            - error: Error message if occurred
     """
     logger.info(f"get_clarification called: {len(urls)} URLs")
 
     try:
-        # URLs scrapen - SEQUENZIELL mit 1 Browser (RAM-safe, keine parallelen Firefox!)
+        # Scrape URLs - SEQUENTIAL with 1 browser (RAM-safe, no parallel Firefox!)
         scraped = await scrape_urls_batch(urls, timeout=20)
 
         success_count = len(scraped)
@@ -134,16 +134,16 @@ async def get_clarification(user_message: str, urls: list[str]) -> dict:
         if success_count == 0:
             logger.warning("No URLs could be scraped")
             return {
-                "clarification": "Leider konnte ich keine der Seiten laden. Möchtest du es mit anderen Suchbegriffen versuchen?",
+                "clarification": "Unfortunately I couldn't load any of the pages. Would you like to try with different search terms?",
                 "scraped_content": {},
                 "success_count": 0,
                 "error": "No URLs scraped successfully"
             }
 
-        # Für LLM formatieren
+        # Format for LLM
         formatted = _format_scraped_for_llm(scraped)
 
-        # LLM Rückfragen
+        # LLM follow-up questions
         clarification, error_message = _call_llm_clarify(user_message, formatted)
 
         if not clarification:
@@ -182,7 +182,7 @@ if __name__ == "__main__":
         "https://github.com/HKUDS/LightRAG",
     ]
 
-    test_query = "Finde innovative RAG Repos"
+    test_query = "Find innovative RAG repos"
 
     async def test():
         result = await get_clarification(test_query, test_urls)

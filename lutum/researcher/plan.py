@@ -1,11 +1,11 @@
 """
 Step 4: Research Plan Generation
 ================================
-LLM erstellt einen tiefgehenden Recherche-Plan basierend auf:
+LLM creates a deep research plan based on:
 - User Query
-- Rückfragen + Antworten
+- Follow-up questions + answers
 
-Output: Mindestens 5 Recherche-Punkte.
+Output: At least 5 research points.
 """
 
 import re
@@ -18,81 +18,81 @@ from lutum.researcher.context_state import ContextState
 logger = get_logger(__name__)
 
 
-PLAN_SYSTEM_PROMPT = """Du bist ein Research-Experte, der tiefe, reproduzierbare Recherche-Pläne erstellt.
+PLAN_SYSTEM_PROMPT = """You are a research expert who creates deep, reproducible research plans.
 
-WICHTIG - SPRACHLICHE ANPASSUNG: Wenn die ursprüngliche Nutzer-Anfrage auf Englisch formuliert wurde, antworte auf Englisch. Wenn sie auf Deutsch war, antworte auf Deutsch.
-
-Der User hat eine Frage gestellt und Rückfragen wurden bereits beantwortet.
-
-DEIN ZIEL:
-Erstelle einen Recherche-Plan, der so konkret ist, dass ein anderer Researcher ihn 1:1 ausführen kann
-(inkl. Suchstrings, Filter, erwartete Deliverables).
+YOUR GOAL:
+Create a research plan that is so concrete that another researcher can execute it 1:1
+(including search strings, filters, expected deliverables).
 
 ═══════════════════════════════════════════════════════════════════
-                         HARTREGELN (PFLICHT)
+                         HARD RULES (MANDATORY)
 ═══════════════════════════════════════════════════════════════════
 
-- Ausgabe besteht NUR aus nummerierten Punkten: (1), (2), (3) ...
-- Zwischen JEDEM Punkt: eine LEERE ZEILE.
-- Jeder Punkt beginnt mit einem Verb (Suche, Recherchiere, Identifiziere, Prüfe, Untersuche, Vergleiche, Extrahiere, Validiere ...).
-- Keine Einleitung, keine Meta-Erklärung, kein Fazit außerhalb der Punkte.
-- Mindestens 5 Punkte; mehr wenn thematisch nötig.
-- KEIN Scope-Drift: Halte Zeitfenster und Plattformen exakt ein.
+- Output consists ONLY of numbered points: (1), (2), (3) ...
+- Between EVERY point: an EMPTY LINE.
+- Each point begins with a verb (Search, Research, Identify, Check, Investigate, Compare, Extract, Validate ...).
+- No introduction, no meta-explanation, no conclusion outside the points.
+- At least 5 points; more if thematically necessary.
+- NO scope drift: Keep time windows and platforms exactly as specified.
 
 ═══════════════════════════════════════════════════════════════════
-                         QUALITÄT (PFLICHT)
+                         QUALITY (MANDATORY)
 ═══════════════════════════════════════════════════════════════════
 
-Jeder Punkt MUSS diese Mini-Struktur enthalten:
+Each point MUST contain this mini-structure:
 
-a) **Ziel** (1 Satz): Was genau soll gefunden/überprüft werden?
-b) **Suchstrings**: Mind. 2 konkrete Suchabfragen (mit Operatoren wenn sinnvoll)
-c) **Filter/Constraints**: z.B. Zeitraum, Plattform, Sprache, etc.
-d) **Output**: Welches Artefakt entsteht? (Liste, Tabelle, Vergleich)
-e) **Validierung** (1 Satz): Wie prüfst du Relevanz/Qualität?
-
-═══════════════════════════════════════════════════════════════════
-                         LEDGER-TYPEN (Referenz)
-═══════════════════════════════════════════════════════════════════
-
-Schreibe in jedem Punkt, welches Ledger befüllt wird:
-
-**Repo-Ledger** (für GitHub/GitLab):
-Repo | Link | Technik/Keyword | Claim (1 Satz) | Evidenz-Snippet | Reifegrad | Notes
-
-**Paper-Ledger** (für Arxiv/Papers):
-Paper | Link | Jahr | Beitrag | Kernergebnis | Evidenz-Snippet | Limitations
-
-**Thread-Ledger** (für Reddit/HN/Foren):
-Plattform | Link | Thema | Hauptargument | Takeaway | Evidenz-Snippet | Credibility
-
-**Issue-Ledger** (für GitHub Issues/PRs):
-Projekt | Issue/PR | Status | Feature | Link | Notes
+a) **Goal** (1 sentence): What exactly should be found/verified?
+b) **Search Queries**: At least 2 concrete search queries (with operators if useful)
+c) **Filters/Constraints**: e.g. time period, platform, language, etc.
+d) **Output**: What artifact is produced? (List, table, comparison)
+e) **Validation** (1 sentence): How do you check relevance/quality?
 
 ═══════════════════════════════════════════════════════════════════
-                         BEISPIEL-FORMAT
+                         LEDGER TYPES (Reference)
 ═══════════════════════════════════════════════════════════════════
 
-(1) Suche nach GitHub-Repositories für adaptive RAG-Chunking.
-**Ziel:** Identifiziere aktive Open-Source-Projekte die dynamische Chunk-Größen implementieren.
-**Suchstrings:** "adaptive chunking RAG" site:github.com, "dynamic chunk size langchain"
-**Filter:** Nur Repos mit >10 Stars, letzter Commit <12 Monate
-**Output:** Repo-Ledger mit 5-10 Einträgen
-**Validierung:** Repo muss funktionierenden Code haben, nicht nur README.
+Write in each point which ledger is filled:
 
-(2) Recherchiere in r/LocalLLaMA nach Erfahrungsberichten zu Chunk-Strategien.
-**Ziel:** Sammle praktische Erkenntnisse aus der Community zu Chunking-Problemen.
-**Suchstrings:** "chunking" site:reddit.com/r/LocalLLaMA, "chunk size RAG reddit"
-**Filter:** Posts der letzten 6 Monate, >10 Upvotes
-**Output:** Thread-Ledger mit Bottlenecks und Workarounds
-**Validierung:** Nur Threads mit konkreten Erfahrungen, keine Fragen ohne Antworten.
+**Repo Ledger** (for GitHub/GitLab):
+Repo | Link | Tech/Keyword | Claim (1 sentence) | Evidence Snippet | Maturity | Notes
 
-(3) ...usw."""
+**Paper Ledger** (for Arxiv/Papers):
+Paper | Link | Year | Contribution | Key Result | Evidence Snippet | Limitations
+
+**Thread Ledger** (for Reddit/HN/Forums):
+Platform | Link | Topic | Main Argument | Takeaway | Evidence Snippet | Credibility
+
+**Issue Ledger** (for GitHub Issues/PRs):
+Project | Issue/PR | Status | Feature | Link | Notes
+
+═══════════════════════════════════════════════════════════════════
+                         EXAMPLE FORMAT
+═══════════════════════════════════════════════════════════════════
+
+(1) Search for GitHub repositories implementing adaptive RAG chunking.
+**Goal:** Identify active open-source projects that implement dynamic chunk sizing.
+**Search Queries:** "adaptive chunking RAG" site:github.com, "dynamic chunk size langchain"
+**Filters:** Only repos with >10 stars, last commit <12 months
+**Output:** Repo Ledger with 5-10 entries
+**Validation:** Repo must have working code, not just README.
+
+(2) Research r/LocalLLaMA for experience reports on chunking strategies.
+**Goal:** Collect practical insights from the community on chunking problems.
+**Search Queries:** "chunking" site:reddit.com/r/LocalLLaMA, "chunk size RAG reddit"
+**Filters:** Posts from last 6 months, >10 upvotes
+**Output:** Thread Ledger with bottlenecks and workarounds
+**Validation:** Only threads with concrete experiences, no unanswered questions.
+
+(3) ...etc.
+
+═══════════════════════════════════════════════════════════════════
+CRITICAL: Your research plan must ALWAYS be in the SAME LANGUAGE as the user's query/question. Match the user's language exactly.
+═══════════════════════════════════════════════════════════════════"""
 
 
 def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> Tuple[Optional[str], Optional[str]]:
     """
-    Ruft LLM via OpenRouter auf.
+    Calls LLM via OpenRouter.
     """
     result = call_chat_completion(
         messages=[
@@ -118,33 +118,33 @@ def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> T
 
 def create_research_plan(context: ContextState) -> dict:
     """
-    Erstellt einen Recherche-Plan basierend auf dem Context State.
+    Creates a research plan based on the Context State.
 
     Args:
-        context: ContextState mit Query, Rückfragen und Antworten
+        context: ContextState with Query, follow-up questions and answers
 
     Returns:
-        dict mit:
-        - plan_points: Liste der Plan-Punkte
-        - plan_text: Formatierter Plan-Text
-        - raw_response: Rohe LLM Antwort
-        - error: Fehlermeldung falls aufgetreten
+        dict with:
+        - plan_points: List of plan points
+        - plan_text: Formatted plan text
+        - raw_response: Raw LLM response
+        - error: Error message if occurred
     """
     logger.info("Creating research plan...")
 
     try:
-        # Context für LLM formatieren
+        # Format context for LLM
         context_text = context.format_for_llm()
 
-        # Prompt zusammenbauen
+        # Build prompt
         user_prompt = f"""{context_text}
 
-Erstelle jetzt einen tiefgehenden Recherche-Plan (mindestens 5 Punkte).
-Nutze das vorgegebene Format mit Ziel/Suchstrings/Filter/Output/Validierung pro Punkt."""
+Now create a deep research plan (at least 5 points).
+Use the specified format with Goal/Search Queries/Filters/Output/Validation per point."""
 
         logger.debug(f"Plan prompt length: {len(user_prompt)} chars")
 
-        # LLM aufrufen via OpenRouter
+        # Call LLM via OpenRouter
         raw_response, error_message = _call_llm(PLAN_SYSTEM_PROMPT, user_prompt)
 
         if not raw_response:
@@ -152,7 +152,7 @@ Nutze das vorgegebene Format mit Ziel/Suchstrings/Filter/Output/Validierung pro 
 
         logger.debug(f"Plan response: {raw_response[:200]}...")
 
-        # Plan-Punkte parsen
+        # Parse plan points
         plan_points = _parse_plan_points(raw_response)
 
         if len(plan_points) < 5:
@@ -172,39 +172,39 @@ Nutze das vorgegebene Format mit Ziel/Suchstrings/Filter/Output/Validierung pro 
 
 def revise_research_plan(context: ContextState, user_feedback: str) -> dict:
     """
-    Überarbeitet den Recherche-Plan basierend auf User-Feedback.
+    Revises the research plan based on user feedback.
 
     Args:
-        context: ContextState mit bestehendem Plan
-        user_feedback: Was der User ändern möchte
+        context: ContextState with existing plan
+        user_feedback: What the user wants to change
 
     Returns:
-        dict mit neuem Plan
+        dict with new plan
     """
     logger.info(f"Revising research plan based on feedback: {user_feedback[:100]}...")
 
     try:
-        # Context für LLM formatieren
+        # Format context for LLM
         context_text = context.format_for_llm()
 
-        # Prompt mit Feedback
+        # Prompt with feedback
         user_prompt = f"""{context_text}
 
-=== USER FEEDBACK ZUM PLAN ===
+=== USER FEEDBACK ON PLAN ===
 {user_feedback}
 
-Überarbeite den Recherche-Plan basierend auf dem Feedback.
-Behalte was gut war, ändere was der User kritisiert hat.
-Mindestens 5 Punkte, nummeriert mit (1), (2), etc.
-Nutze das vorgegebene Format mit Ziel/Suchstrings/Filter/Output/Validierung pro Punkt."""
+Revise the research plan based on the feedback.
+Keep what was good, change what the user criticized.
+At least 5 points, numbered with (1), (2), etc.
+Use the specified format with Goal/Search Queries/Filters/Output/Validation per point."""
 
-        # LLM aufrufen via OpenRouter
+        # Call LLM via OpenRouter
         raw_response, error_message = _call_llm(PLAN_SYSTEM_PROMPT, user_prompt)
 
         if not raw_response:
             return {"error": error_message or "LLM call failed", "plan_points": []}
 
-        # Plan-Punkte parsen
+        # Parse plan points
         plan_points = _parse_plan_points(raw_response)
 
         return {
@@ -221,25 +221,25 @@ Nutze das vorgegebene Format mit Ziel/Suchstrings/Filter/Output/Validierung pro 
 
 def _parse_plan_points(text: str) -> list[str]:
     """
-    Parst nummerierte Plan-Punkte aus LLM-Output.
+    Parses numbered plan points from LLM output.
 
-    Erwartet Format:
-    (1) Erster Punkt...
-    (2) Zweiter Punkt...
+    Expected format:
+    (1) First point...
+    (2) Second point...
 
     Args:
-        text: Roher LLM Output
+        text: Raw LLM output
 
     Returns:
-        Liste der Plan-Punkte (ohne Nummerierung)
+        List of plan points (without numbering)
     """
-    # Pattern: (1), (2), etc. am Zeilenanfang
+    # Pattern: (1), (2), etc. at line start
     pattern = r'\((\d+)\)\s*(.+?)(?=\n\(\d+\)|\n\n|\Z)'
     matches = re.findall(pattern, text, re.DOTALL)
 
     points = []
     for num, content in matches:
-        # Cleanup: Zeilenumbrüche zu Leerzeichen, trimmen
+        # Cleanup: line breaks to spaces, trim
         clean_content = " ".join(content.split())
         if clean_content:
             points.append(clean_content)
@@ -252,9 +252,9 @@ def _parse_plan_points(text: str) -> list[str]:
 
 
 def _format_plan(points: list[str]) -> str:
-    """Formatiert Plan-Punkte für Anzeige."""
+    """Formats plan points for display."""
     if not points:
-        return "Kein Plan erstellt."
+        return "No plan created."
 
     lines = []
     for i, point in enumerate(points, 1):
@@ -265,16 +265,16 @@ def _format_plan(points: list[str]) -> str:
 
 # === CLI TEST ===
 if __name__ == "__main__":
-    # Test mit Dummy-Context
+    # Test with dummy context
     ctx = ContextState()
-    ctx.user_query = "Was sind die neuesten RAG-Techniken für LLMs?"
+    ctx.user_query = "What are the latest RAG techniques for LLMs?"
     ctx.clarification_questions = [
-        "Welche spezifischen Aspekte interessieren dich?",
-        "Hast du bereits Erfahrung mit RAG-Systemen?",
+        "Which specific aspects interest you?",
+        "Do you have experience with RAG systems?",
     ]
     ctx.clarification_answers = [
-        "Komprimierung und Token-Reduktion",
-        "Ja, grundlegende Kenntnisse mit LangChain",
+        "Compression and token reduction",
+        "Yes, basic knowledge with LangChain",
     ]
 
     print("Context for LLM:")
@@ -284,8 +284,8 @@ if __name__ == "__main__":
 
     result = create_research_plan(ctx)
 
-        if result.get("error"):
-            logger.error("Error: %s", result["error"])
+    if result.get("error"):
+        logger.error("Error: %s", result["error"])
     else:
         print(f"\nGenerated Plan ({len(result['plan_points'])} points):")
         print(result["plan_text"])

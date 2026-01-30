@@ -406,11 +406,29 @@ export function Chat() {
     initDarkMode();
   }, []);
 
-  // Check backend connection
+  // Check backend connection - fast polling until connected, then slow
   useEffect(() => {
-    checkHealth();
-    const interval = setInterval(checkHealth, 30000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let wasConnected = false;
+
+    const poll = async () => {
+      const online = await checkHealth();
+
+      if (online !== wasConnected) {
+        // Connection status changed - adjust polling speed
+        wasConnected = online;
+        if (interval) clearInterval(interval);
+        interval = setInterval(poll, online ? 30000 : 2000);
+      }
+    };
+
+    // Start with fast polling (2s)
+    poll();
+    interval = setInterval(poll, 2000);
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [checkHealth]);
 
   // Save sessions on change

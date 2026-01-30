@@ -3,8 +3,8 @@ Overview Module
 ===============
 Step 1: User Message → LLM → Search Queries
 
-Bevor wir planen, holen wir uns erstmal eine Übersicht.
-LLM analysiert was der User will und generiert Google Queries.
+Before we plan, we first get an overview.
+LLM analyzes what the user wants and generates Google queries.
 """
 
 from typing import Optional, Tuple
@@ -17,40 +17,42 @@ logger = get_logger(__name__)
 
 
 # === PROMPT ===
-GET_OVERVIEW_PROMPT = """Du bekommst eine Nutzer-Anfrage. Deine Aufgabe:
+GET_OVERVIEW_PROMPT = """You receive a user request. Your task:
 
-1. Verstehe was der Nutzer will
-2. Erstelle 10 Google-Suchanfragen mit PFLICHT-Diversifizierung
-3. Gib einen kurzen Session-Titel (2-5 Wörter)
+1. Understand what the user wants
+2. Create 10 Google search queries with MANDATORY diversification
+3. Provide a short session title (2-5 words)
 
-## REGELN:
-- Englische Queries bevorzugen (mehr Ergebnisse)
-- Session-Titel auf Deutsch, kurz und prägnant
+## RULES:
+- Prefer English queries (more results)
+- Session title should be concise and descriptive
 
-## FORMAT (EXAKT SO - Kategorie ist PFLICHT!):
+## FORMAT (EXACTLY LIKE THIS - Category is MANDATORY!):
 
-session: <kurzer titel 2-5 wörter>
-query 1 (Primär): <offizielle Quelle, Docs, Repo, Paper>
-query 2 (Primär): <offizielle Quelle, Docs, Repo, Paper>
-query 3 (Community): <Reddit, HN, Forum, Diskussion>
-query 4 (Community): <Reddit, HN, Forum, Diskussion>
-query 5 (Praktisch): <Tutorial, How-to, Beispiel, Implementation>
-query 6 (Praktisch): <Tutorial, How-to, Beispiel, Implementation>
-query 7 (Kritisch): <Probleme, Limitationen, Alternativen, Vergleich>
-query 8 (Kritisch): <Probleme, Limitationen, Alternativen, Vergleich>
-query 9 (Aktuell): <News, 2024, 2025, neu, latest, Trends>
-query 10 (Aktuell): <News, 2024, 2025, neu, latest, Trends>
+session: <short title 2-5 words>
+query 1 (Primary): <official source, docs, repo, paper>
+query 2 (Primary): <official source, docs, repo, paper>
+query 3 (Community): <Reddit, HN, forum, discussion>
+query 4 (Community): <Reddit, HN, forum, discussion>
+query 5 (Practical): <tutorial, how-to, example, implementation>
+query 6 (Practical): <tutorial, how-to, example, implementation>
+query 7 (Critical): <problems, limitations, alternatives, comparison>
+query 8 (Critical): <problems, limitations, alternatives, comparison>
+query 9 (Current): <news, 2024, 2025, new, latest, trends>
+query 10 (Current): <news, 2024, 2025, new, latest, trends>
 
-Nutzer-Anfrage:
+CRITICAL: The session title must be in the SAME LANGUAGE as the user's request below.
+
+User request:
 """
 
 
 def _parse_response(response: str) -> tuple[str, list[str]]:
     """
-    Parst LLM Response zu Session-Titel und Queries.
+    Parses LLM response to session title and queries.
 
     Args:
-        response: LLM Response mit "session: ..." und "query N: ..." Format
+        response: LLM Response with "session: ..." and "query N: ..." format
 
     Returns:
         Tuple (session_title, queries_list)
@@ -64,14 +66,14 @@ def _parse_response(response: str) -> tuple[str, list[str]]:
         for line in response.strip().split("\n"):
             line = line.strip()
 
-            # Session-Titel extrahieren
+            # Extract session title
             if line.lower().startswith("session:"):
                 session_title = line.split(":", 1)[1].strip()
                 logger.debug(f"Extracted session title: {session_title}")
 
-            # Suche nach "query N:" Pattern
+            # Search for "query N:" pattern
             elif line.lower().startswith("query"):
-                # Alles nach dem ersten ":" nehmen
+                # Take everything after the first ":"
                 if ":" in line:
                     query = line.split(":", 1)[1].strip()
                     if query:
@@ -89,14 +91,14 @@ def _parse_response(response: str) -> tuple[str, list[str]]:
 
 def _call_llm(user_message: str, max_tokens: int = 2000) -> Tuple[Optional[str], Optional[str]]:
     """
-    Ruft LLM mit Get-Overview Prompt auf.
+    Calls LLM with Get-Overview prompt.
 
     Args:
-        user_message: Die Nutzer-Anfrage
-        max_tokens: Max Response Tokens
+        user_message: The user request
+        max_tokens: Max response tokens
 
     Returns:
-        LLM Response oder None bei Fehler
+        LLM response or None on error
     """
     logger.debug(f"Calling LLM for overview: {user_message[:100]}...")
 
@@ -123,22 +125,22 @@ def _call_llm(user_message: str, max_tokens: int = 2000) -> Tuple[Optional[str],
 
 def get_overview_queries(user_message: str) -> dict:
     """
-    Step 1: Generiert Google Queries für Übersicht + Session-Titel.
+    Step 1: Generates Google queries for overview + session title.
 
     Args:
-        user_message: Die ursprüngliche Nutzer-Anfrage
+        user_message: The original user request
 
     Returns:
-        Dict mit:
-            - session_title: LLM-generierter Titel (2-5 Wörter)
-            - queries_initial: Liste der generierten Queries
-            - raw_response: Rohe LLM Antwort
-            - error: Fehlermeldung falls aufgetreten
+        Dict with:
+            - session_title: LLM-generated title (2-5 words)
+            - queries_initial: List of generated queries
+            - raw_response: Raw LLM response
+            - error: Error message if occurred
     """
     logger.info(f"get_overview_queries called: {user_message[:100]}...")
 
     try:
-        # LLM aufrufen
+        # Call LLM
         raw_response, error_message = _call_llm(user_message)
 
         if not raw_response:
@@ -149,7 +151,7 @@ def get_overview_queries(user_message: str) -> dict:
                 "error": error_message or "LLM call failed"
             }
 
-        # Session-Titel + Queries parsen
+        # Parse session title + queries
         session_title, queries = _parse_response(raw_response)
 
         if not queries:

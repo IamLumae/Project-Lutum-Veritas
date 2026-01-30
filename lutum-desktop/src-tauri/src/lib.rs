@@ -4,6 +4,8 @@
 
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 use tauri::Manager;
 
 #[cfg(windows)]
@@ -11,6 +13,17 @@ use std::os::windows::process::CommandExt;
 
 // Backend process handle
 struct BackendProcess(Mutex<Option<Child>>);
+
+// Helper: Log to file for debugging
+fn log_to_file(msg: &str) {
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("lutum_backend.log")
+    {
+        let _ = writeln!(file, "{}", msg);
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,25 +38,35 @@ pub fn run() {
                 .expect("Failed to get resource dir");
 
             let backend_main = resource_dir.join("backend").join("main.py");
+            let backend_dir = resource_dir.join("backend");
+
+            log_to_file(&format!("Resource dir: {:?}", resource_dir));
+            log_to_file(&format!("Backend main: {:?}", backend_main));
+            log_to_file(&format!("Backend exists: {}", backend_main.exists()));
 
             if backend_main.exists() {
                 println!("Starting backend from: {:?}", backend_main);
+                log_to_file(&format!("Starting backend from: {:?}", backend_main));
+
+                // Log file für Backend stderr
+                let log_file = File::create(backend_dir.join("backend_stderr.log"))
+                    .map(Stdio::from)
+                    .unwrap_or(Stdio::null());
 
                 // Python hidden starten (CREATE_NO_WINDOW)
-                // Normales Python (nicht frozen) hat stdout auch wenn hidden!
                 #[cfg(windows)]
                 let child = Command::new("python")
                     .arg(&backend_main)
-                    .current_dir(resource_dir.join("backend"))
+                    .current_dir(&backend_dir)
                     .stdout(Stdio::null())
-                    .stderr(Stdio::null())
+                    .stderr(log_file)
                     .creation_flags(0x08000000) // CREATE_NO_WINDOW
                     .spawn();
 
                 #[cfg(not(windows))]
                 let child = Command::new("python3")
                     .arg(&backend_main)
-                    .current_dir(resource_dir.join("backend"))
+                    .current_dir(&backend_dir)
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
                     .spawn();
@@ -53,15 +76,17 @@ pub fn run() {
                         let state = app.state::<BackendProcess>();
                         *state.0.lock().unwrap() = Some(process);
                         println!("Backend started successfully on port 8420");
+                        log_to_file("Backend started successfully on port 8420");
                     }
                     Err(e) => {
                         eprintln!("Failed to start backend: {}", e);
+                        log_to_file(&format!("Failed to start backend: {}", e));
                         // Fallback: Versuche py launcher (Windows)
                         #[cfg(windows)]
                         {
                             let fallback = Command::new("py")
                                 .args(["-3", backend_main.to_str().unwrap()])
-                                .current_dir(resource_dir.join("backend"))
+                                .current_dir(&backend_dir)
                                 .stdout(Stdio::null())
                                 .stderr(Stdio::null())
                                 .creation_flags(0x08000000)
@@ -71,12 +96,16 @@ pub fn run() {
                                 let state = app.state::<BackendProcess>();
                                 *state.0.lock().unwrap() = Some(process);
                                 println!("Backend started via py launcher");
+                                log_to_file("Backend started via py launcher");
+                            } else {
+                                log_to_file("Fallback py launcher also failed");
                             }
                         }
                     }
                 }
             } else {
                 eprintln!("Backend not found at {:?}", backend_main);
+                log_to_file(&format!("Backend NOT FOUND at {:?}", backend_main));
             }
 
             Ok(())
