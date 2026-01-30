@@ -45,6 +45,23 @@ This isn't an "alternative" to existing tools. This is proof that a solo dev wit
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/veritas.png" alt="Main Interface" width="700"/>
+</p>
+
+<p align="center">
+  <img src="assets/Screenshot_22.png" alt="Research Output" width="700"/>
+</p>
+
+<p align="center">
+  <img src="assets/Screenshot_23.png" alt="Settings" width="400"/>
+  <img src="assets/Screenshot_24.png" alt="PDF Export" width="400"/>
+</p>
+
+---
+
 ## What is Lutum Veritas?
 
 **Lutum Veritas** is a self-hosted Deep Research Engine that transforms any question into a comprehensive research document. Unlike Perplexity, ChatGPT, or Google's AI Overview, you bring your own API key and everything runs locally.
