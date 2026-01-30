@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lutum.core.log_config import get_logger
+from lutum.core.api_config import set_api_config
 from services.lutum_service import LutumService
 
 logger = get_logger(__name__)
@@ -56,6 +57,9 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="User Nachricht / URL + Query", max_length=10000)
     api_key: Optional[str] = Field(None, description="OpenRouter API Key (überschreibt Default)", max_length=200)
     max_iterations: int = Field(5, ge=1, le=20, description="Max Iterationen für komplexe Anfragen")
+    provider: str = Field("openrouter", description="API Provider", max_length=50)
+    work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="LLM Modell", max_length=100)
+    base_url: str = Field("https://openrouter.ai/api/v1/chat/completions", description="API Base URL")
 
 
 class ChatResponse(BaseModel):
@@ -95,6 +99,12 @@ async def chat(request: ChatRequest):
     logger.debug(f"Chat request received: {request.message[:100] if request.message else 'EMPTY'}...")
 
     try:
+        set_api_config(
+            key=request.api_key or "",
+            provider=request.provider,
+            work_model=request.work_model,
+            base_url=request.base_url
+        )
         result = await lutum_service.process_message(
             message=request.message,
             api_key=request.api_key,

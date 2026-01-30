@@ -106,7 +106,9 @@ export interface Message {
   url?: string;
   loading?: boolean;
   /** Spezial-Typ für verschiedene Anzeigen */
-  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry" | "synthesis" | "conclusion";
+  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry" | "synthesis" | "conclusion" | "log";
+  /** Log Level für log-Nachrichten */
+  logLevel?: "warning" | "error";
   /** URLs für sources-Typ */
   sources?: string[];
   /** Source Registry für klickbare Citations {1: "url1", 2: "url2"} */
@@ -831,7 +833,20 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
               )}
 
               {/* Point Summary Box - Special rendering */}
-              {msg.type === "point_summary" && msg.pointTitle ? (
+              {msg.type === "log" ? (
+                <div
+                  className={`rounded-xl border px-4 py-3 text-sm ${
+                    msg.logLevel === "error"
+                      ? "border-red-500/40 bg-red-500/10 text-red-200"
+                      : "border-amber-400/40 bg-amber-400/10 text-amber-200"
+                  }`}
+                >
+                  <div className="text-xs font-semibold uppercase tracking-wide mb-2 opacity-80">
+                    {msg.logLevel === "error" ? "Backend Error" : "Backend Warnung"}
+                  </div>
+                  <MarkdownContent content={msg.content} isUser={false} />
+                </div>
+              ) : msg.type === "point_summary" && msg.pointTitle ? (
                 <PointSummaryBox
                   pointTitle={msg.pointTitle}
                   pointNumber={msg.pointNumber || 1}

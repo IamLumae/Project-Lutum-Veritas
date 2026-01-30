@@ -9,7 +9,7 @@ import { Sidebar } from "./Sidebar";
 import { MessageList } from "./MessageList";
 import { InputBar } from "./InputBar";
 import { Settings } from "./Settings";
-import { useBackend } from "../hooks/useBackend";
+import { useBackend, type LogEvent } from "../hooks/useBackend";
 import { initDarkMode, loadSettings, PROVIDER_CONFIG } from "../stores/settings";
 import { t, type Language } from "../i18n/translations";
 import {
@@ -494,6 +494,22 @@ export function Chat() {
     }));
   }, []);
 
+  const addLogMessage = useCallback(
+    (sessionId: string, event: LogEvent) => {
+      const details = event.full && event.full !== event.message ? `\n\n${event.full}` : "";
+      const logMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: `${event.message}${details}`,
+        timestamp: new Date().toISOString(),
+        type: "log",
+        logLevel: event.level === "ERROR" ? "error" : "warning",
+      };
+      addMessage(sessionId, logMsg);
+    },
+    [addMessage]
+  );
+
   // Send message handler - Phase-basiert
   const handleSend = useCallback(
     async (content: string) => {
@@ -531,6 +547,7 @@ export function Chat() {
 
         // Pipeline mit Status-Callback für Live-Updates und Sources-Callback für URLs
         const settings = loadSettings();
+        const baseUrl = PROVIDER_CONFIG[settings.provider].baseUrl;
         const pipelineResult = await runPipeline(
           content,
           settings.apiKey,
@@ -550,10 +567,13 @@ export function Chat() {
             };
             addMessage(sessionId, sourcesMsg);
           },
-          undefined,  // onLog - not used in pipeline
+          (event) => addLogMessage(sessionId, event),
           modelSize,
           academicMode,
-          language
+          language,
+          settings.provider,
+          settings.workModel,
+          baseUrl
         );
 
         // Session-Titel vom LLM
@@ -590,6 +610,7 @@ export function Chat() {
         if (!ctx) return;
 
         const settings = loadSettings();
+        const baseUrl = PROVIDER_CONFIG[settings.provider].baseUrl;
         const planResult = await createPlan(
           ctx.user_query,
           ctx.clarification_questions,
@@ -597,7 +618,10 @@ export function Chat() {
           settings.apiKey,
           sessionId,
           modelSize,
-          academicMode
+          academicMode,
+          settings.provider,
+          settings.workModel,
+          baseUrl
         );
 
         // Check für Normal Mode (plan_points) ODER Academic Mode (academic_bereiche)
@@ -639,7 +663,18 @@ export function Chat() {
 
         // User will Plan ändern
         const settings = loadSettings();
-        const reviseResult = await revisePlan(ctx, content, settings.apiKey, sessionId, modelSize, academicMode);
+        const baseUrl = PROVIDER_CONFIG[settings.provider].baseUrl;
+        const reviseResult = await revisePlan(
+          ctx,
+          content,
+          settings.apiKey,
+          sessionId,
+          modelSize,
+          academicMode,
+          settings.provider,
+          settings.workModel,
+          baseUrl
+        );
 
         // Check für Normal Mode (plan_points) ODER Academic Mode (academic_bereiche)
         const hasNormalPlan = reviseResult?.plan_points && reviseResult.plan_points.length > 0;
@@ -666,7 +701,7 @@ export function Chat() {
         }
       }
     },
-    [sessionsState.activeSessionId, activeSession, runPipeline, createPlan, revisePlan, updateSession, addMessage]
+    [sessionsState.activeSessionId, activeSession, runPipeline, createPlan, revisePlan, updateSession, addMessage, addLogMessage]
   );
 
   // Handler: "Los geht's" Button → Deep Research starten
@@ -680,6 +715,7 @@ export function Chat() {
     updateSession(sessionId, { phase: "researching" });
 
     const settings = loadSettings();
+    const baseUrl = PROVIDER_CONFIG[settings.provider].baseUrl;
 
     // === ACADEMIC MODE: Hierarchische Bereiche mit Meta-Synthese ===
     if (academicMode && ctx.academic_bereiche && Object.keys(ctx.academic_bereiche).length > 0) {
@@ -770,11 +806,12 @@ export function Chat() {
           };
           addMessage(sessionId, metaMsg);
         },
-        undefined,  // onLog - not used currently
+        (event) => addLogMessage(sessionId, event),
+        settings.provider,
         settings.workModel,
         settings.finalModel,
         language,
-        PROVIDER_CONFIG[settings.provider].baseUrl
+        baseUrl
       );
 
       // Ergebnis verarbeiten
@@ -922,13 +959,14 @@ export function Chat() {
         };
         addMessage(sessionId, synthMsg);
       },
-      undefined,  // onLog - not used currently
+      (event) => addLogMessage(sessionId, event),
       modelSize,
       academicMode,
+      settings.provider,
       settings.workModel,
       settings.finalModel,
       language,
-      PROVIDER_CONFIG[settings.provider].baseUrl
+      baseUrl
     );
 
     // Finale Response
@@ -974,7 +1012,7 @@ export function Chat() {
       addMessage(sessionId, errorMsg);
       updateSession(sessionId, { phase: "planning" }); // Back to Planning
     }
-  }, [activeSession, runDeepResearch, runAcademicResearch, updateSession, addMessage, academicMode, language]);
+  }, [activeSession, runDeepResearch, runAcademicResearch, updateSession, addMessage, addLogMessage, academicMode, language]);
 
   // Handler: "Edit plan" button → User can enter changes
   const handleEditPlan = useCallback(() => {
@@ -1031,9 +1069,11 @@ export function Chat() {
 
         // Automatisch fortsetzen
         const settings = loadSettings();
+        const baseUrl = PROVIDER_CONFIG[settings.provider].baseUrl;
         await resumeSession(
           result.session_id,
           settings.apiKey,
+          settings.provider,
           settings.workModel,
           settings.finalModel,
           // onStatus
@@ -1072,7 +1112,9 @@ export function Chat() {
               timestamp: new Date().toISOString(),
             };
             addMessage(sessionId, synthMsg);
-          }
+          },
+          (event) => addLogMessage(sessionId, event),
+          baseUrl
         );
 
         updateSession(sessionId, { phase: "done" });
@@ -1099,7 +1141,7 @@ export function Chat() {
       };
       addMessage(sessionId, errorMsg);
     }
-  }, [activeSession, recoverSession, resumeSession, addMessage, updateSession, language, setCurrentStatus]);
+  }, [activeSession, recoverSession, resumeSession, addMessage, addLogMessage, updateSession, language, setCurrentStatus]);
 
   return (
     <div className="h-screen flex bg-[var(--bg-primary)] overflow-hidden">

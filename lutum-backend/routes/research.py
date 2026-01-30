@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from lutum.core.log_config import get_logger, get_and_clear_log_buffer
-from lutum.core.api_config import get_api_key, set_api_key
+from lutum.core.api_config import get_api_headers, set_api_config
 from lutum.researcher.overview import get_overview_queries
 from lutum.researcher.pipeline import run_pipeline, format_pipeline_response
 from lutum.researcher.context_state import ContextState
@@ -228,6 +228,9 @@ class OverviewRequest(BaseModel):
     message: str = Field(..., description="User Nachricht / Research-Auftrag", max_length=10000)
     session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
     api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    provider: str = Field("openrouter", description="API Provider", max_length=50)
+    work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="LLM Modell", max_length=100)
+    base_url: str = Field("https://openrouter.ai/api/v1/chat/completions", description="API Base URL")
 
 
 class OverviewResponse(BaseModel):
@@ -262,8 +265,13 @@ async def research_overview(request: OverviewRequest):
     """
     logger.debug(f"Research overview request: {request.message[:100] if request.message else 'EMPTY'}...")
 
-    # API Key setzen für alle LLM Calls
-    set_api_key(request.api_key)
+    # API Config setzen für alle LLM Calls
+    set_api_config(
+        key=request.api_key,
+        provider=request.provider,
+        work_model=request.work_model,
+        base_url=request.base_url
+    )
 
     try:
         if not request.message or not request.message.strip():
@@ -314,6 +322,9 @@ class PipelineRequest(BaseModel):
     max_step: int = Field(3, ge=1, le=5, description="Bis zu welchem Step ausführen (default 3)")
     api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
     language: str = Field("de", description="Language for status messages (de/en)")
+    provider: str = Field("openrouter", description="API Provider", max_length=50)
+    work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="LLM Modell", max_length=100)
+    base_url: str = Field("https://openrouter.ai/api/v1/chat/completions", description="API Base URL")
 
 
 class PipelineResponse(BaseModel):
@@ -346,8 +357,13 @@ async def research_run(request: PipelineRequest):
     logger.info(f"Pipeline request (streaming): {request.message[:100] if request.message else 'EMPTY'}...")
 
     async def generate():
-        # API Key setzen für alle LLM Calls
-        set_api_key(request.api_key)
+        # API Config setzen für alle LLM Calls
+        set_api_config(
+            key=request.api_key,
+            provider=request.provider,
+            work_model=request.work_model,
+            base_url=request.base_url
+        )
         lang = request.language
 
         try:
@@ -365,6 +381,8 @@ async def research_run(request: PipelineRequest):
             context.update(result1)
 
             if context.get("error"):
+                for log_event in flush_log_buffer():
+                    yield log_event
                 yield json.dumps({"type": "error", "message": context["error"]}) + "\n"
                 return
 
@@ -383,6 +401,8 @@ async def research_run(request: PipelineRequest):
                 logger.info("Browser session closed (RAM cleanup)")
 
                 if context.get("error"):
+                    for log_event in flush_log_buffer():
+                        yield log_event
                     yield json.dumps({"type": "error", "message": context["error"]}) + "\n"
                     return
 
@@ -428,6 +448,8 @@ async def research_run(request: PipelineRequest):
         except Exception as e:
             logger.error(f"Pipeline failed: {e}", exc_info=True)
             # Security: Don't expose internal error details to client
+            for log_event in flush_log_buffer():
+                yield log_event
             yield json.dumps({"type": "error", "message": "Research pipeline failed. Please try again."}) + "\n"
 
     return StreamingResponse(
@@ -446,6 +468,9 @@ class PlanRequest(BaseModel):
     session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
     api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
     academic_mode: bool = Field(False, description="Academic Mode: Hierarchische Bereiche statt flacher Liste")
+    provider: str = Field("openrouter", description="API Provider", max_length=50)
+    work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="LLM Modell", max_length=100)
+    base_url: str = Field("https://openrouter.ai/api/v1/chat/completions", description="API Base URL")
 
 
 class PlanResponse(BaseModel):
@@ -474,8 +499,13 @@ async def research_plan(request: PlanRequest):
     mode_str = "ACADEMIC" if request.academic_mode else "NORMAL"
     logger.info(f"Plan request ({mode_str}): {request.user_query[:100]}...")
 
-    # API Key setzen
-    set_api_key(request.api_key)
+    # API Config setzen
+    set_api_config(
+        key=request.api_key,
+        provider=request.provider,
+        work_model=request.work_model,
+        base_url=request.base_url
+    )
 
     try:
         sid = request.session_id
@@ -558,6 +588,9 @@ class PlanReviseRequest(BaseModel):
     feedback: str = Field(..., description="User-Feedback zum Plan", max_length=5000)
     session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
     api_key: str = Field(..., description="OpenRouter API Key", max_length=200)
+    provider: str = Field("openrouter", description="API Provider", max_length=50)
+    work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="LLM Modell", max_length=100)
+    base_url: str = Field("https://openrouter.ai/api/v1/chat/completions", description="API Base URL")
 
 
 @router.post("/research/plan/revise", response_model=PlanResponse)
@@ -573,8 +606,13 @@ async def research_plan_revise(request: PlanReviseRequest):
     """
     logger.info(f"Plan revision request: {request.feedback[:100]}...")
 
-    # API Key setzen
-    set_api_key(request.api_key)
+    # API Config setzen
+    set_api_config(
+        key=request.api_key,
+        provider=request.provider,
+        work_model=request.work_model,
+        base_url=request.base_url
+    )
 
     try:
         sid = request.session_id
@@ -622,6 +660,7 @@ class DeepResearchRequest(BaseModel):
     context_state: dict = Field(..., description="Context State mit Plan")
     session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
     api_key: str = Field(..., description="API Key", max_length=200)
+    provider: str = Field("openrouter", description="API Provider", max_length=50)
     work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="Modell für Vorarbeit (Think, Pick URLs, Dossier)", max_length=100)
     final_model: str = Field("qwen/qwen3-vl-235b-a22b-instruct", description="Modell für Final Synthesis", max_length=100)
     language: str = Field("de", description="Language for status messages (de/en)")
@@ -674,10 +713,7 @@ async def research_deep(request: DeepResearchRequest):
         try:
             response = requests.post(
                 BASE_URL,
-                headers={
-                    "Authorization": f"Bearer {get_api_key()}",
-                    "Content-Type": "application/json",
-                },
+                headers=get_api_headers(),
                 json={
                     "model": model,
                     "messages": [
@@ -714,8 +750,14 @@ async def research_deep(request: DeepResearchRequest):
     logger.info("Deep Research Pipeline started")
     start_time = time.time()
 
-    # API Key setzen für alle LLM Calls
-    set_api_key(request.api_key)
+    # API Config setzen für alle LLM Calls
+    set_api_config(
+        key=request.api_key,
+        provider=request.provider,
+        work_model=request.work_model,
+        final_model=request.final_model,
+        base_url=request.base_url
+    )
 
     # === CHECKPOINT SYSTEM ===
     import hashlib
@@ -1406,6 +1448,7 @@ class ResumeRequest(BaseModel):
     """Request für Session Resume."""
     session_id: str = Field(..., description="Session ID zum Fortsetzen", max_length=50)
     api_key: str = Field(..., description="API Key", max_length=200)
+    provider: str = Field("openrouter", description="API Provider", max_length=50)
     work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", max_length=100)
     final_model: str = Field("qwen/qwen3-vl-235b-a22b-instruct", max_length=100)
     language: str = Field("de", description="Language for status messages (de/en)")
@@ -1449,6 +1492,7 @@ async def resume_session(request: ResumeRequest):
         context_state=context_state,
         session_id=request.session_id,
         api_key=request.api_key,
+        provider=request.provider,
         work_model=request.work_model,
         final_model=request.final_model,
         base_url=request.base_url
@@ -1465,6 +1509,7 @@ class AcademicResearchRequest(BaseModel):
     context_state: dict = Field(..., description="Context State mit academic_bereiche")
     session_id: Optional[str] = Field(None, description="Session ID für SSE Events", max_length=100)
     api_key: str = Field(..., description="API Key", max_length=200)
+    provider: str = Field("openrouter", description="API Provider", max_length=50)
     work_model: str = Field("google/gemini-2.5-flash-lite-preview-09-2025", description="Modell für Vorarbeit", max_length=100)
     final_model: str = Field("anthropic/claude-sonnet-4.5", description="Modell für Meta-Synthesis", max_length=100)
     language: str = Field("de", description="Language for status messages (de/en)")
@@ -1516,8 +1561,14 @@ async def research_academic(request: AcademicResearchRequest):
     logger.info("Academic Research Pipeline started")
     start_time = time.time()
 
-    # API Key setzen
-    set_api_key(request.api_key)
+    # API Config setzen
+    set_api_config(
+        key=request.api_key,
+        provider=request.provider,
+        work_model=request.work_model,
+        final_model=request.final_model,
+        base_url=request.base_url
+    )
 
     MODEL_FAST = request.work_model
     MODEL_META = request.final_model
@@ -1528,10 +1579,7 @@ async def research_academic(request: AcademicResearchRequest):
         try:
             response = http_requests.post(
                 BASE_URL,
-                headers={
-                    "Authorization": f"Bearer {get_api_key()}",
-                    "Content-Type": "application/json",
-                },
+                headers=get_api_headers(),
                 json={
                     "model": model,
                     "messages": [

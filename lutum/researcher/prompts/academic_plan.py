@@ -19,15 +19,12 @@ v2.0 UPDATES:
 
 import re
 from typing import Optional
-import requests
 from lutum.core.log_config import get_logger
-from lutum.core.api_config import get_api_key
+from lutum.core.api_config import get_work_model
+from lutum.core.llm_client import call_chat_completion
 from lutum.researcher.context_state import ContextState
 
 logger = get_logger(__name__)
-
-# OpenRouter Config
-MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
 
 ACADEMIC_PLAN_SYSTEM_PROMPT = """You are a research architect creating multi-disciplinary research plans.
@@ -158,49 +155,26 @@ def _call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 3000) -> t
         - Success: (text, None)
         - Failure: (None, error_string)
     """
-    try:
-        api_key = get_api_key()
-        if not api_key:
-            return None, "No API key configured"
+    result = call_chat_completion(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        model=get_work_model(),
+        max_tokens=max_tokens,
+        timeout=90
+    )
 
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "max_tokens": max_tokens,
-                "temperature": 0.7,
-            },
-            timeout=90
-        )
+    if result.error:
+        logger.error(f"LLM error: {result.error}")
+        return None, result.error
 
-        result = response.json()
+    if not result.content:
+        return None, "LLM response empty"
 
-        # Log full response for debugging
-        logger.info(f"[ACADEMIC PLAN] OpenRouter response status: {response.status_code}")
-
-        if "choices" not in result:
-            error_msg = result.get("error", {}).get("message", str(result))
-            logger.error(f"LLM error: {error_msg}")
-            return None, f"OpenRouter error: {error_msg}"
-
-        answer = result["choices"][0]["message"]["content"]
-        logger.info(f"[ACADEMIC PLAN] RAW LLM RESPONSE:\n{answer[:2000]}...")
-        return answer, None
-
-    except requests.Timeout:
-        logger.error("LLM timeout after 90s")
-        return None, "LLM request timed out (90s)"
-    except Exception as e:
-        logger.error(f"LLM call failed: {e}", exc_info=True)
-        return None, f"LLM call failed: {str(e)}"
+    answer = str(result.content)
+    logger.info(f"[ACADEMIC PLAN] RAW LLM RESPONSE:\n{answer[:2000]}...")
+    return answer, None
 
 
 def create_academic_plan(context: ContextState) -> dict:
@@ -356,7 +330,7 @@ if __name__ == "__main__":
     result = create_academic_plan(ctx)
 
     if result.get("error"):
-        print(f"Error: {result['error']}")
+        logger.error("Error: %s", result["error"])
     else:
         print(f"\nGenerated Academic Plan ({len(result['bereiche'])} areas):")
         print(result["plan_text"])
