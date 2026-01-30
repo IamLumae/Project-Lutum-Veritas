@@ -33,7 +33,7 @@ Perplexity, OpenAI and Google deliver summaries. I wanted truth.
 
 So I stopped waiting and built it myself. The Camoufox scraper cuts through Cloudflare, Bloomberg and paywalls with 0% detection. The recursive pipeline passes context forward – each research point knows what the previous ones discovered. Claim Audits force the model into self-reflection instead of blind assertions.
 
-The result: 203,000 characters of academic depth for a single query. Cost: $0.08. That's 92x cheaper than OpenAI o3 and qualitatively in a different league.
+The result: 203,000 characters of academic depth for a single query. Cost: under 20 cents. That's orders of magnitude cheaper than OpenAI o3 and qualitatively in a different league.
 
 This isn't an "alternative" to existing tools. This is proof that a solo dev with the right architecture can beat billion-dollar corporations at what should be their core competency: deep, verifiable knowledge.
 
