@@ -141,8 +141,9 @@ Powered by **Camoufox** - a hardened Firefox fork that bypasses:
    - If Python is not found, the installer will prompt you to install it
    - Dependencies are installed automatically via pip
 3. Launch **Lutum Veritas** from your Start Menu
-4. Enter your [OpenRouter API Key](https://openrouter.ai/keys) in Settings
-5. Start researching!
+4. Select your **API Provider** in Settings (OpenRouter, OpenAI, Anthropic, Google Gemini, or HuggingFace)
+5. Enter your API Key
+6. Start researching!
 
 > **Note:** The backend starts automatically when you open the app. No separate process to manage.
 
@@ -174,8 +175,9 @@ npm run tauri dev
 ## Quick Start
 
 1. **Launch App** - Open Lutum Veritas (backend starts automatically)
-2. **Enter API Key** - Settings → OpenRouter API Key
-3. **Ask Anything** - Type your research question
+2. **Select Provider** - Settings → Choose OpenRouter, OpenAI, Anthropic, Gemini, or HuggingFace
+3. **Enter API Key** - Enter your API key for the selected provider
+4. **Ask Anything** - Type your research question
 4. **Answer Clarifications** - Help the AI understand your needs
 5. **Review Plan** - Approve or modify the research plan
 6. **Click "Let's Go"** - Watch the magic happen
@@ -221,7 +223,7 @@ npm run tauri dev
 | Dossier | Gemini Flash Lite | Analyze and summarize |
 | Final Synthesis | Qwen 235B | Create comprehensive report |
 
-All models accessed via [OpenRouter](https://openrouter.ai) - you only need one API key.
+**Supported Providers:** [OpenRouter](https://openrouter.ai) (200+ models), [OpenAI](https://platform.openai.com), [Anthropic](https://console.anthropic.com), [Google Gemini](https://aistudio.google.com), [HuggingFace](https://huggingface.co) - bring your own API key.
 
 ---
 
@@ -233,7 +235,7 @@ All models accessed via [OpenRouter](https://openrouter.ai) - you only need one 
 | **Frontend** | React 19 + TypeScript + Tailwind CSS |
 | **Backend** | FastAPI (Python 3.11) |
 | **Scraper** | Camoufox (Hardened Firefox) |
-| **LLMs** | OpenRouter (Gemini, Qwen, Claude, etc.) |
+| **LLMs** | Multi-Provider (OpenRouter, OpenAI, Anthropic, Gemini, HuggingFace) |
 | **Database** | File-based JSON (sessions) |
 
 ---
