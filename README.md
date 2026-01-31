@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Open Source Deep Research Engine</strong><br>
-  <em>"Shaping Truth from Raw Data"</em>
+  <em>"The search for a truth can never be worth more than the search to question it."</em>
 </p>
 
 <p align="center">
