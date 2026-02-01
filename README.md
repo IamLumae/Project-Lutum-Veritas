@@ -68,7 +68,7 @@ Independent comparison of Lutum Veritas vs. ChatGPT Deep Research vs. Perplexity
 - Quality review by competing AIs
 - 16-agent fact-check protocol for hallucinations
 
-**TL;DR:** Lutum delivered 103k characters with 90 peer-reviewed sources for $0.19. ChatGPT: 12k chars, 25 sources, fabricated citations. Gemini: 24k chars, data minimization detected. Perplexity: 21k chars, $20/mo subscription.
+**TL;DR:** Lutum delivered 103k characters with 90 sources for $0.19. ChatGPT: 12k chars, 25 sources, fabricated citations. Gemini: 24k chars, data minimization detected. Perplexity: 21k chars, $20/mo subscription.
 
 ---
 
