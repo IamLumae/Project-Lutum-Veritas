@@ -57,6 +57,21 @@ This isn't an "alternative" to existing tools. This is proof that a solo dev wit
 
 ---
 
+## 🔬 Benchmark Results
+
+Independent comparison of Lutum Veritas vs. ChatGPT Deep Research vs. Perplexity Pro vs. Gemini Advanced:
+
+**[📊 View Full Benchmark Report](https://veritas-test.neocities.org/)** *(German - use browser translate)*
+
+- 4-way comparison with identical scientific query
+- Quantitative metrics: output length, sources, costs, duration
+- Quality review by competing AIs
+- 16-agent fact-check protocol for hallucinations
+
+**TL;DR:** Lutum delivered 103k characters with 90 peer-reviewed sources for $0.19. ChatGPT: 12k chars, 25 sources, fabricated citations. Gemini: 24k chars, data minimization detected. Perplexity: 21k chars, $20/mo subscription.
+
+---
+
 ## What is Lutum Veritas?
 
 **Lutum Veritas** is a self-hosted Deep Research Engine that transforms any question into a comprehensive research document. Unlike Perplexity, ChatGPT, or Google's AI Overview, you bring your own API key and everything runs locally.
