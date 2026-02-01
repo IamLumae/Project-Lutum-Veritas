@@ -17,4 +17,14 @@
 
 ---
 
-*Last updated: 2026-01-30*
+## Recently Fixed
+
+### Academic Mode Output & Persistence
+**Status:** Fixed (v1.2.5)
+**Description:** Academic Mode produced only 48k chars instead of 200k+, and created no backups/sessions.
+**Fix:** Token limits increased (48k/96k), Toulmin/GRADE/Falsification re-added, backup logic implemented.
+**Reference:** See PATCH_NOTES.md v1.2.5
+
+---
+
+*Last updated: 2026-02-01*

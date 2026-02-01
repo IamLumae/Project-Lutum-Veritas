@@ -50,6 +50,11 @@ REQUIREMENTS:
 - Evaluate evidence quality (what is well-supported vs speculative?)
 - Name open questions specific to THIS area
 
+DEPTH OVER BREVITY:
+- Be COMPREHENSIVE, not compressed
+- We want detailed analysis, not executive summaries
+- More explanation is better than less
+
 ═══════════════════════════════════════════════════════════════════
                          OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════════
@@ -61,7 +66,7 @@ REQUIREMENTS:
 2) Second central finding[2]
 3) Third central finding[3]
 ...
-(5-7 findings minimum!)
+(10-15 findings MINIMUM for comprehensive coverage!)
 
 ### Deep Analysis
 [In-depth analysis of the most important aspects. NOT a summary - actual analysis!]
@@ -80,16 +85,19 @@ REQUIREMENTS:
 - Question 3 - what would answer it
 
 ### Area Summary
-[2-3 sentences capturing the essence of this area's contribution to the research question]
+[Comprehensive summary of this area's contribution to the research question.
+Be thorough - include key mechanisms, evidence, and implications.
+NO LENGTH LIMIT - as long as needed to be complete.]
 
 ═══════════════════════════════════════════════════════════════════
                          HARD RULES
 ═══════════════════════════════════════════════════════════════════
 
 1. CITATIONS: Keep ALL [N] references from the dossiers!
-2. NO FILLER: Every sentence must add information
+2. BE COMPREHENSIVE: Explain fully - don't compress or summarize excessively
 3. DEPTH: Analysis section must be substantial (not just restating findings)
 4. START IMMEDIATELY: First output character must be #
+5. NO LENGTH LIMITS: Write as much as needed to be thorough
 
 CRITICAL - LANGUAGE: Always respond in the same language as the user's original query shown below."""
 

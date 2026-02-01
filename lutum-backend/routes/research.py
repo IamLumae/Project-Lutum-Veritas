@@ -1853,7 +1853,7 @@ async def research_academic(request: AcademicResearchRequest):
                         user_prompt,
                         BEREICHS_SYNTHESIS_MODEL,
                         BEREICHS_SYNTHESIS_TIMEOUT,
-                        16000
+                        48000  # Increased from 16k for comprehensive area analysis
                     )
                     # Flush logs after Bereichs-Synthese
                     for log_event in flush_log_buffer():
@@ -1916,7 +1916,7 @@ async def research_academic(request: AcademicResearchRequest):
                     user_prompt,
                     ACADEMIC_CONCLUSION_MODEL,
                     ACADEMIC_CONCLUSION_TIMEOUT,
-                    32000
+                    96000  # Increased from 32k for comprehensive synthesis (200k+ chars output)
                 )
                 # Flush logs after Academic Conclusion
                 for log_event in flush_log_buffer():
@@ -1973,6 +1973,16 @@ async def research_academic(request: AcademicResearchRequest):
                 final_document += f"{'█' * 60}\n\n"
                 final_document += impact_statement
                 final_document += academic_conclusion
+
+                # SAFETY: Academic Final Document als Backup speichern
+                if final_document:
+                    from pathlib import Path
+                    from datetime import datetime
+                    backup_dir = Path(__file__).parent.parent.parent / "academic_synthesis_backups"
+                    backup_dir.mkdir(exist_ok=True)
+                    backup_file = backup_dir / f"academic_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                    backup_file.write_text(final_document, encoding="utf-8")
+                    logger.info(f"[ACADEMIC] Backup saved to {backup_file}")
 
             else:
                 final_document = "No areas successfully researched." if lang == "en" else "Keine Bereiche erfolgreich recherchiert."

@@ -1,5 +1,33 @@
 # Lutum Veritas - Patch Notes
 
+## v1.2.5 (2026-02-01)
+
+### Academic Mode Output & Persistence Fixes
+
+#### Academic Mode Output Length Restored
+- **Issue:** Academic Mode output dropped from 200k+ chars to ~48k chars
+- **Root Cause:**
+  - Token limits too low (16k for Area Synthesis, 32k for Conclusion)
+  - Prompt rework removed Toulmin/GRADE/Falsification requirements
+  - Added restrictive length limits ("2-3 paragraphs", "5-7 findings")
+- **Fix:**
+  - Token limits increased: Area Synthesis 16k→48k, Academic Conclusion 32k→96k
+  - Re-added Toulmin Argumentation, GRADE Evidence System, Falsification Requirement, 5 Connection Types
+  - Removed all length limits ("2-3 paragraphs" → "NO LENGTH LIMIT")
+  - Changed "NO FILLER" to "BE COMPREHENSIVE"
+  - Increased minimum findings: 5-7 → 10-15
+- **Files:** `bereichs_synthesis.py`, `academic_conclusion.py`, `research.py` (lines 1856, 1919)
+
+#### Academic Mode Backup/Persistence Added
+- **Issue:** Academic Sessions created no backups, no fallbacks, no database entries
+- **Root Cause:** Normal Mode had backup logic (lines 1276-1284), Academic Mode did not
+- **Fix:** Added backup saving for Academic Mode final documents
+  - Backups saved to: `academic_synthesis_backups/academic_YYYYMMDD_HHMMSS.md`
+  - Fallbacks already existed for Area Synthesis (line 1862-1866) and Conclusion (line 1925-1926)
+- **Files:** `research.py` (line ~1978)
+
+---
+
 ## v1.2.4 (2026-01-31)
 
 ### Bug Fixes
