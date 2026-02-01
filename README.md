@@ -61,7 +61,8 @@ This isn't an "alternative" to existing tools. This is proof that a solo dev wit
 
 Independent comparison of Lutum Veritas vs. ChatGPT Deep Research vs. Perplexity Pro vs. Gemini Advanced:
 
-**[📊 View Full Benchmark Report](https://veritas-test.neocities.org/)** *(German - use browser translate)*
+**[📊 View Full Benchmark Report](https://veritas-test.neocities.org/)** *(German)*
+**[🌐 Auto-Translated Version (EN)](https://veritas--test-neocities-org.translate.goog/?_x_tr_sl=de&_x_tr_tl=en&_x_tr_hl=de&_x_tr_pto=wapp)** *(Google Translate)*
 
 - 4-way comparison with identical scientific query
 - Quantitative metrics: output length, sources, costs, duration
