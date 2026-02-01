@@ -353,7 +353,8 @@ def parse_dossier_response(response: str) -> tuple[str, str, dict]:
                     url_and_title = match.group(2).strip()
                     citations[num] = url_and_title
 
-    # Extract Key Learnings (new format: ## 💡 KEY LEARNINGS)
+    # Extract Key Learnings (new format: ## 💡 KEY LEARNINGS or 💡 KEY LEARNINGS)
+    # Try with ## first, then without (LLM sometimes omits ##)
     if "## 💡 KEY LEARNINGS" in response:
         parts = response.split("## 💡 KEY LEARNINGS")
         dossier_text = parts[0].strip()
@@ -368,7 +369,22 @@ def parse_dossier_response(response: str) -> tuple[str, str, dict]:
             else:
                 key_learnings = learnings_part.strip()
 
-    # Fallback: Old format (=== KEY LEARNINGS ===)
+    # Fallback 1: Without ## (LLM sometimes omits the ## prefix)
+    elif "💡 KEY LEARNINGS" in response:
+        parts = response.split("💡 KEY LEARNINGS")
+        dossier_text = parts[0].strip()
+
+        if len(parts) > 1:
+            learnings_part = parts[1]
+            # Until Sources block or End Marker
+            if "=== SOURCES ===" in learnings_part:
+                key_learnings = learnings_part.split("=== SOURCES ===")[0].strip()
+            elif "=== END DOSSIER ===" in learnings_part:
+                key_learnings = learnings_part.split("=== END DOSSIER ===")[0].strip()
+            else:
+                key_learnings = learnings_part.strip()
+
+    # Fallback 2: Old format (=== KEY LEARNINGS ===)
     elif "=== KEY LEARNINGS ===" in response:
         parts = response.split("=== KEY LEARNINGS ===")
         dossier_text = parts[0].strip()

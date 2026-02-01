@@ -1,5 +1,21 @@
 # Lutum Veritas - Patch Notes
 
+## v1.2.6 (2026-02-01)
+
+### Dossier Key Learnings Parser Fix
+
+#### Key Learnings Extraction Fixed
+- **Issue:** Dossiers zeigten "Keine Key Learnings" obwohl die Section im Output vorhanden war
+- **Root Cause:** Parser suchte nach `## 💡 KEY LEARNINGS` (mit ##), aber LLM schrieb oft ohne ##
+- **Fix:** Parser jetzt flexibler - erkennt 3 Varianten:
+  1. `## 💡 KEY LEARNINGS` (mit ##)
+  2. `💡 KEY LEARNINGS` (ohne ##) ← NEU
+  3. `=== KEY LEARNINGS ===` (legacy)
+- **Impact:** Context-Accumulation zwischen Dossiers funktioniert jetzt zuverlässiger (~55% → ~95%+ Erfolgsrate erwartet)
+- **Files:** `lutum/researcher/prompts/dossier.py` (parse_dossier_response, Line 356-382)
+
+---
+
 ## v1.2.5 (2026-02-01)
 
 ### Academic Mode Output & Persistence Fixes

@@ -1,5 +1,18 @@
 # Known Bugs - Lutum Veritas
 
+## Research Pipeline (lutum-backend)
+
+### Key Learnings Extraction Inconsistent
+**Status:** Fixed (v1.2.6)
+**Description:** Dossiers extrahierten manchmal NICHT die "For Next Steps" Key Learnings, obwohl das Dossier sie enthielt. Frontend zeigte "Keine Key Learnings".
+**Root Cause:** Parser suchte nach `## 💡 KEY LEARNINGS` (mit ##), aber LLM schrieb oft `💡 KEY LEARNINGS` (ohne ##) → Parser fand die Section nicht.
+**Fix:** Parser jetzt flexibler - sucht erst mit ##, dann ohne ##, dann alte Format (=== KEY LEARNINGS ===). Alle 3 Varianten werden erkannt.
+**Impact Before Fix:** Context-Accumulation zwischen Dossiers funktionierte bei ~45% der Fälle nicht (6/11 Erfolgsrate).
+**Files:** `lutum/researcher/prompts/dossier.py` (parse_dossier_response)
+**Reference:** Screenshots zeigten Parser-Miss trotz vorhandener Section
+
+---
+
 ## Desktop App (lutum-desktop)
 
 ### Windows Desktop Shortcut Icon
