@@ -91,7 +91,7 @@ Independent comparison of Lutum Veritas vs. ChatGPT Deep Research vs. Perplexity
   <img src="https://img.shields.io/github/forks/IamLumae/Project-Lutum-Veritas?style=for-the-badge&logo=github&color=blue" alt="Forks">
 </p>
 
-📊 **Traffic Stats (Last 14 Days):**
+📊 **Traffic Stats (First 3 Days):**
 - 🔥 **289 Clones**
 - 👀 **343 Views**
 - 🎯 **11 Points on Hacker News**
