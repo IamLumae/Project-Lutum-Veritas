@@ -35,9 +35,14 @@ from pydantic import BaseModel, Field
 
 # Import Deep Question Pipeline
 import sys
-pipeline_path = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(pipeline_path))
-from deep_question_pipeline import DeepQuestionPipeline
+try:
+    # Try direct import first (works when installed as package)
+    from deep_question_pipeline import DeepQuestionPipeline
+except ImportError:
+    # Fallback: add parent path for development mode
+    pipeline_path = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(pipeline_path))
+    from deep_question_pipeline import DeepQuestionPipeline
 from lutum.core.log_config import get_logger, get_and_clear_log_buffer
 
 logger = get_logger(__name__)

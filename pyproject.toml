@@ -34,6 +34,7 @@ packages = ["lutum", "lutum_backend"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "lutum_backend/www" = "lutum_backend/www"
+"deep_question_pipeline.py" = "deep_question_pipeline.py"
 
 [tool.hatch.build.targets.sdist]
 include = ["lutum", "lutum_backend", "README.md", "LICENSE"]
