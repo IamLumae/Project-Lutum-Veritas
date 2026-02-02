@@ -100,13 +100,13 @@ function isReportContent(content: string): boolean {
 
 export interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system";
   content: string;
-  timestamp: Date;
+  timestamp: Date | string;
   url?: string;
   loading?: boolean;
   /** Spezial-Typ für verschiedene Anzeigen */
-  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry" | "synthesis" | "conclusion" | "log";
+  type?: "text" | "plan" | "sources" | "point_summary" | "synthesis_waiting" | "sources_registry" | "synthesis" | "conclusion" | "log" | "user_question" | "stage_update" | "scrape_progress" | "answer" | "verification";
   /** Log Level für log-Nachrichten */
   logLevel?: "warning" | "error";
   /** URLs für sources-Typ */
@@ -587,10 +587,138 @@ function processChildrenForCitations(children: React.ReactNode, keyPrefix: strin
 }
 
 /**
+ * AskAnswerMessage - Renders Ask Mode answer with collapsible verification & sources
+ */
+function AskAnswerMessage({
+  message,
+  language,
+}: {
+  message: Message & {
+    sourceRegistry?: Record<number, string>;
+    verification?: {
+      content: string;
+      sourceRegistry?: Record<number, string>;
+    };
+  };
+  language: Language;
+}) {
+  const [verificationOpen, setVerificationOpen] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+
+  // Detect verification status from content
+  const getVerificationStatus = (content: string): 'success' | 'warning' | 'error' => {
+    const lower = content.toLowerCase();
+    if (lower.includes('widersprüche') || lower.includes('contradictions') || lower.includes('fehler') || lower.includes('error')) {
+      return 'error';
+    }
+    if (lower.includes('warnung') || lower.includes('warning') || lower.includes('achtung') || lower.includes('caution')) {
+      return 'warning';
+    }
+    return 'success';
+  };
+
+  const verificationStatus = message.verification ? getVerificationStatus(message.verification.content) : 'success';
+  const statusConfig = {
+    success: { icon: '✓', color: 'green', label: language === 'de' ? 'Verifiziert' : 'Verified' },
+    warning: { icon: '⚠', color: 'yellow', label: language === 'de' ? 'Prüfen empfohlen' : 'Review Recommended' },
+    error: { icon: '⚠', color: 'red', label: language === 'de' ? 'Widersprüche gefunden' : 'Contradictions Found' },
+  }[verificationStatus];
+
+  // Extract sources from sourceRegistry
+  const sources = message.sourceRegistry ? Object.values(message.sourceRegistry) : [];
+
+  return (
+    <div className="space-y-4">
+      {/* Main Answer - Highlighted */}
+      <div className="relative rounded-xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-blue-600/10 p-4">
+        <div className="absolute top-0 left-0 w-12 h-[3px] bg-gradient-to-r from-blue-500 to-transparent" />
+        <div className="text-[14px] md:text-[15px] leading-relaxed">
+          <MarkdownContent content={message.content} isUser={false} sourceRegistry={message.sourceRegistry} />
+        </div>
+      </div>
+
+      {/* Collapsible Verification */}
+      {message.verification && (
+        <div className={`rounded-xl border-2 overflow-hidden ${
+          verificationStatus === 'success' ? 'border-green-500/30 bg-gradient-to-br from-green-500/5 to-green-600/10' :
+          verificationStatus === 'warning' ? 'border-yellow-500/30 bg-gradient-to-br from-yellow-500/5 to-yellow-600/10' :
+          'border-red-500/30 bg-gradient-to-br from-red-500/5 to-red-600/10'
+        }`}>
+          <button
+            onClick={() => setVerificationOpen(!verificationOpen)}
+            className={`w-full px-4 py-3 flex items-center justify-between text-sm font-bold ${
+              verificationStatus === 'success' ? 'bg-green-500/10 hover:bg-green-500/15' :
+              verificationStatus === 'warning' ? 'bg-yellow-500/10 hover:bg-yellow-500/15' :
+              'bg-red-500/10 hover:bg-red-500/15'
+            } transition-colors`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`text-lg ${
+                verificationStatus === 'success' ? 'text-green-400' :
+                verificationStatus === 'warning' ? 'text-yellow-400' :
+                'text-red-400'
+              }`}>{statusConfig.icon}</span>
+              <span className={
+                verificationStatus === 'success' ? 'text-green-300' :
+                verificationStatus === 'warning' ? 'text-yellow-300' :
+                'text-red-300'
+              }>{language === 'de' ? 'Verifikation' : 'Verification'}</span>
+              <span className={`text-xs opacity-75 ${
+                verificationStatus === 'success' ? 'text-green-400' :
+                verificationStatus === 'warning' ? 'text-yellow-400' :
+                'text-red-400'
+              }`}>({statusConfig.label})</span>
+            </div>
+            <span className="text-xl">{verificationOpen ? '−' : '+'}</span>
+          </button>
+          {verificationOpen && (
+            <div className="px-4 py-3 text-sm leading-relaxed border-t border-current/10">
+              <MarkdownContent content={message.verification.content} isUser={false} sourceRegistry={message.verification.sourceRegistry} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Collapsible Sources */}
+      {sources.length > 0 && (
+        <div className="rounded-xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-purple-600/10 overflow-hidden">
+          <button
+            onClick={() => setSourcesOpen(!sourcesOpen)}
+            className="w-full px-4 py-3 bg-purple-500/10 hover:bg-purple-500/15 flex items-center justify-between text-sm font-bold text-purple-300 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔗</span>
+              <span>{language === 'de' ? 'Genutzte Quellen' : 'Used Sources'}</span>
+              <span className="text-xs opacity-75">({sources.length})</span>
+            </div>
+            <span className="text-xl">{sourcesOpen ? '−' : '+'}</span>
+          </button>
+          {sourcesOpen && (
+            <div className="px-4 py-3 space-y-2 text-sm border-t border-purple-500/10">
+              {sources.map((url, idx) => (
+                <div key={idx} className="flex items-start gap-2">
+                  <span className="text-purple-400 font-mono text-xs mt-0.5">[{idx + 1}]</span>
+                  <button
+                    onClick={() => safeOpenUrl(url)}
+                    className="text-purple-300 hover:text-purple-200 underline decoration-purple-500/30 hover:decoration-purple-400 text-left break-all transition-colors"
+                  >
+                    {url}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * MarkdownContent - Rendert Markdown mit schönem Styling.
  * Security: All URLs are validated before opening.
  */
-function MarkdownContent({ content, isUser }: { content: string; isUser: boolean }) {
+function MarkdownContent({ content, isUser, sourceRegistry }: { content: string; isUser: boolean; sourceRegistry?: Record<number, string> }) {
   const handleLinkClick = async (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
     await safeOpenUrl(href);
@@ -671,7 +799,39 @@ function MarkdownContent({ content, isUser }: { content: string; isUser: boolean
 
         // Links (with security validation)
         a: ({ href, children }) => {
-          // Security: Validate URL before rendering as clickable
+          // Check if this is a citation [1], [2], [V1], [V2]
+          const childText = typeof children === 'string' ? children : (Array.isArray(children) ? children[0] : '');
+          const isCitation = /^\[V?\d+\]$/.test(String(childText));
+
+          if (isCitation && sourceRegistry) {
+            // Extract number
+            const match = String(childText).match(/\[V?(\d+)\]/);
+            if (match) {
+              const num = parseInt(match[1]);
+              const url = sourceRegistry[num];
+              const isVerification = String(childText).startsWith('[V');
+
+              return (
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (url) safeOpenUrl(url);
+                  }}
+                  className={`cursor-pointer font-medium hover:underline ${
+                    isVerification
+                      ? 'text-orange-500 hover:text-orange-400'
+                      : 'text-[var(--accent-active)] hover:opacity-80'
+                  }`}
+                  title={url}
+                >
+                  {children}
+                </a>
+              );
+            }
+          }
+
+          // Regular link handling
           const safeHref = href && isValidUrl(href) ? href : null;
 
           if (!safeHref) {
@@ -923,6 +1083,41 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
                   metrics={msg.conclusionMetrics}
                   language={language}
                 />
+              ) : (msg as any).type === "stage_update" ? (
+                /* Ask Mode: Stage Update Message */
+                <div className="text-[var(--text-secondary)] text-sm italic">
+                  <MarkdownContent content={msg.content} isUser={false} />
+                </div>
+              ) : (msg as any).type === "scrape_progress" ? (
+                /* Ask Mode: Scrape Progress (updates in place) */
+                <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                  <div className="animate-pulse">🔍</div>
+                  <span>{msg.content}</span>
+                  {(msg as any).progress && (
+                    <span className="text-xs">
+                      ({(msg as any).progress.done}/{(msg as any).progress.total})
+                    </span>
+                  )}
+                </div>
+              ) : (msg as any).type === "answer" ? (
+                /* Ask Mode: Answer with Citations + Verification */
+                <AskAnswerMessage
+                  message={msg as any}
+                  language={language}
+                />
+              ) : (msg as any).type === "verification" ? (
+                /* Ask Mode: Verification Report */
+                <div className="rounded-xl border-2 border-orange-500/30 overflow-hidden bg-gradient-to-br from-orange-500/5 to-orange-600/10">
+                  <div className="px-4 py-3 bg-orange-500/10 border-b border-orange-500/20">
+                    <div className="flex items-center gap-2 text-sm font-bold text-orange-400">
+                      <span className="text-lg">✓</span>
+                      {language === 'de' ? 'Verifikationsbericht' : 'Verification Report'}
+                    </div>
+                  </div>
+                  <div className="px-4 py-3 text-sm leading-relaxed">
+                    <MarkdownContent content={msg.content} isUser={false} sourceRegistry={(msg as any).sourceRegistry} />
+                  </div>
+                </div>
               ) : (
                 <>
                   {/* Markdown Content - mit ID für PDF Export wenn finaler Report */}
@@ -965,7 +1160,7 @@ export function MessageList({ messages, loading, onStartResearch, onEditPlan, on
 
               {/* Timestamp */}
               <div className={`text-xs mt-3 ${isUser ? "opacity-60" : "opacity-40"}`}>
-                {msg.timestamp.toLocaleTimeString("de-DE", {
+                {(typeof msg.timestamp === 'string' ? new Date(msg.timestamp) : msg.timestamp).toLocaleTimeString("de-DE", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}

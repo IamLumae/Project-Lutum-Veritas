@@ -83,6 +83,28 @@ export const translations = {
 
     // InputBar.tsx
     startResearch: "Recherche starten...",
+    askPlaceholder: "Stelle eine Frage...",
+
+    // Mode Toggle
+    deepResearch: "Deep Research",
+    askMode: "Ask Mode",
+    askModeActive: "Ask Mode aktiv - Schnelle Q&A mit Verification",
+    researchModeActive: "Research Mode aktiv - Tiefgehende Recherche",
+
+    // Ask Sidebar
+    newQuestion: "Neue Frage",
+    yourQuestions: "Deine Fragen",
+    noQuestionsYet: "Noch keine Fragen",
+
+    // Ask Messages
+    analyzingQuestion: "Analysiere deine Frage...",
+    determiningKnowledge: "Ermittle benötigtes Wissen...",
+    creatingSearches: "Erstelle Suchstrategien...",
+    searchingSources: "Durchsuche Quellen...",
+    synthesizingAnswer: "Synthetisiere Antwort...",
+    verifyingClaims: "Verifiziere Behauptungen...",
+    creatingVerification: "Erstelle finale Verifikation...",
+    askComplete: "Antwort vollständig",
   },
 
   en: {
@@ -162,6 +184,28 @@ export const translations = {
 
     // InputBar.tsx
     startResearch: "Start research...",
+    askPlaceholder: "Ask a question...",
+
+    // Mode Toggle
+    deepResearch: "Deep Research",
+    askMode: "Ask Mode",
+    askModeActive: "Ask Mode active - Quick Q&A with verification",
+    researchModeActive: "Research Mode active - In-depth research",
+
+    // Ask Sidebar
+    newQuestion: "New Question",
+    yourQuestions: "Your Questions",
+    noQuestionsYet: "No questions yet",
+
+    // Ask Messages
+    analyzingQuestion: "Analyzing your question...",
+    determiningKnowledge: "Determining required knowledge...",
+    creatingSearches: "Creating search strategies...",
+    searchingSources: "Searching sources...",
+    synthesizingAnswer: "Synthesizing answer...",
+    verifyingClaims: "Verifying claims...",
+    creatingVerification: "Creating final verification...",
+    askComplete: "Answer complete",
   }
 } as const;
 

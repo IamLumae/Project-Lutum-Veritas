@@ -1853,7 +1853,7 @@ async def research_academic(request: AcademicResearchRequest):
                         user_prompt,
                         BEREICHS_SYNTHESIS_MODEL,
                         BEREICHS_SYNTHESIS_TIMEOUT,
-                        48000  # Increased from 16k for comprehensive area analysis
+                        32000  # Conservative limit to prevent model crashes
                     )
                     # Flush logs after Bereichs-Synthese
                     for log_event in flush_log_buffer():
@@ -1875,6 +1875,18 @@ async def research_academic(request: AcademicResearchRequest):
                         "sources_count": len(bereich_sources),
                         "dossiers": bereich_dossiers
                     })
+
+                    # SAFETY: Backup Area-Synthese immediately (in case of later crash)
+                    try:
+                        from pathlib import Path
+                        from datetime import datetime
+                        backup_dir = Path(__file__).parent.parent.parent / "academic_synthesis_backups"
+                        backup_dir.mkdir(exist_ok=True)
+                        area_backup = backup_dir / f"area_{bereich_index}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                        area_backup.write_text(f"# {bereich_titel}\n\n{bereich_synthese}", encoding="utf-8")
+                        logger.info(f"[ACADEMIC] Area {bereich_index} backup saved to {area_backup}")
+                    except Exception as e:
+                        logger.error(f"[ACADEMIC] Failed to backup area {bereich_index}: {e}")
 
                     yield json.dumps({
                         "type": "bereich_complete",

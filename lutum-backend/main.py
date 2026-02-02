@@ -167,6 +167,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from routes.chat import router as chat_router
 from routes.health import router as health_router
 from routes.research import router as research_router
+from routes.ask import router as ask_router
 
 
 @asynccontextmanager
@@ -218,6 +219,7 @@ app.add_middleware(
 app.include_router(chat_router)
 app.include_router(health_router)
 app.include_router(research_router)
+app.include_router(ask_router)
 
 
 if __name__ == "__main__":

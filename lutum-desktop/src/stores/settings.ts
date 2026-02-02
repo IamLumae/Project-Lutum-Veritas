@@ -48,6 +48,7 @@ export interface Settings {
   workModel: string;   // Modell für Vorarbeit (Think, Pick URLs, Dossier)
   finalModel: string;  // Modell für Final Synthesis
   language: Language;  // UI + Prompt Sprache
+  appMode: 'research' | 'ask';  // App Mode: Deep Research vs Ask Mode
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -59,6 +60,7 @@ const DEFAULT_SETTINGS: Settings = {
   workModel: "google/gemini-2.5-flash-lite-preview-09-2025",
   finalModel: "qwen/qwen3-vl-235b-a22b-instruct",
   language: 'de',
+  appMode: 'research',
 };
 
 /**
@@ -106,4 +108,20 @@ export function applyDarkMode(isDark: boolean): void {
 export function initDarkMode(): void {
   const settings = loadSettings();
   applyDarkMode(settings.darkMode);
+}
+
+/**
+ * Applies mode-specific color theme to document.
+ */
+export function applyModeTheme(mode: 'research' | 'ask'): void {
+  document.documentElement.classList.remove('mode-research', 'mode-ask');
+  document.documentElement.classList.add(`mode-${mode}`);
+}
+
+/**
+ * Initializes mode theme on app start.
+ */
+export function initModeTheme(): void {
+  const settings = loadSettings();
+  applyModeTheme(settings.appMode);
 }

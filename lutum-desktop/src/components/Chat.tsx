@@ -9,8 +9,11 @@ import { Sidebar } from "./Sidebar";
 import { MessageList } from "./MessageList";
 import { InputBar } from "./InputBar";
 import { Settings } from "./Settings";
+import { ModeToggle } from "./ModeToggle";
+import { AskSidebar } from "./AskSidebar";
 import { useBackend, type LogEvent } from "../hooks/useBackend";
-import { initDarkMode, loadSettings, PROVIDER_CONFIG } from "../stores/settings";
+import { useAskEvents } from "../hooks/useAskEvents";
+import { initDarkMode, initModeTheme, loadSettings, saveSettings, applyModeTheme, PROVIDER_CONFIG } from "../stores/settings";
 import { t, type Language } from "../i18n/translations";
 import {
   SessionsState,
@@ -21,7 +24,13 @@ import {
   saveSessions,
   createSession,
 } from "../stores/sessions";
-import { saveSettings } from "../stores/settings";
+import {
+  AskSessionsState,
+  AskMessage,
+  loadAskSessions,
+  saveAskSessions,
+  createAskSession,
+} from "../stores/askSessions";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile, writeFile } from "@tauri-apps/plugin-fs";
 import { jsPDF } from "jspdf";
@@ -45,6 +54,17 @@ export function Chat() {
   const [modelSize, setModelSize] = useState<'small' | 'large'>(() => loadSettings().modelSize);
   const [academicMode, setAcademicMode] = useState(() => loadSettings().academicMode);
   const [language, setLanguage] = useState<Language>(() => loadSettings().language);
+  const [appMode, setAppMode] = useState<'research' | 'ask'>(() => loadSettings().appMode);
+
+  // Ask Sessions State
+  const [askSessionsState, setAskSessionsState] = useState<AskSessionsState>(loadAskSessions);
+
+  // Ask Events Hook
+  const askEventsHook = useAskEvents();
+
+  // Refs for Ask Mode message tracking
+  const scrapeMessageIdsRef = useRef<{ phase1?: string; phase2?: string }>({});
+  const pendingAnswerRef = useRef<{ sessionId: string; content: string; sourceRegistry?: Record<number, string> } | null>(null);
 
   // Init Settings State
   useEffect(() => {
@@ -61,6 +81,21 @@ export function Chat() {
     const s = loadSettings();
     saveSettings({ ...s, academicMode: newVal });
   };
+
+  // Helper: Mode Toggle
+  const handleModeToggle = () => {
+    const newMode = appMode === 'research' ? 'ask' : 'research';
+    setAppMode(newMode);
+    const s = loadSettings();
+    saveSettings({ ...s, appMode: newMode });
+    applyModeTheme(newMode);
+  };
+
+  // Initialize mode theme on mount
+  useEffect(() => {
+    initDarkMode();
+    initModeTheme();
+  }, []);
 
   // EXPORT HANDLERS - Using Tauri native APIs
   const handleExportMD = async () => {
@@ -454,6 +489,68 @@ export function Chat() {
     loading: false,
   }));
 
+  // Ask Session Helpers
+  const activeAskSession = askSessionsState.sessions.find(
+    (s) => s.id === askSessionsState.activeSessionId
+  );
+
+  const addAskMessage = useCallback((sessionId: string, message: AskMessage) => {
+    setAskSessionsState(prev => {
+      const updated = {
+        ...prev,
+        sessions: prev.sessions.map(s =>
+          s.id === sessionId
+            ? { ...s, messages: [...s.messages, message] }
+            : s
+        ),
+      };
+      saveAskSessions(updated);
+      return updated;
+    });
+  }, []);
+
+  const updateAskMessage = useCallback((sessionId: string, messageId: string, updates: Partial<AskMessage>) => {
+    setAskSessionsState(prev => {
+      const updated = {
+        ...prev,
+        sessions: prev.sessions.map(s =>
+          s.id === sessionId
+            ? {
+                ...s,
+                messages: s.messages.map(m =>
+                  m.id === messageId ? { ...m, ...updates } : m
+                ),
+              }
+            : s
+        ),
+      };
+      saveAskSessions(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleNewAskQuestion = useCallback(() => {
+    // EXACT copy of Research Mode handleNewSession
+    const newSession = createAskSession();
+    setAskSessionsState((prev) => ({
+      sessions: [newSession, ...prev.sessions],
+      activeSessionId: newSession.id,
+    }));
+  }, []);
+
+  const deleteAskSession = useCallback((sessionId: string) => {
+    setAskSessionsState(prev => {
+      const filtered = prev.sessions.filter(s => s.id !== sessionId);
+      const newActiveId =
+        prev.activeSessionId === sessionId
+          ? (filtered.length > 0 ? filtered[0].id : null)
+          : prev.activeSessionId;
+      const updated = { sessions: filtered, activeSessionId: newActiveId };
+      saveAskSessions(updated);
+      return updated;
+    });
+  }, []);
+
   // Session handlers
   const handleNewSession = useCallback(() => {
     const newSession = createSession();
@@ -534,9 +631,257 @@ export function Chat() {
     [addMessage]
   );
 
+  // Ask Pipeline Starter
+  const startAskPipeline = useCallback(async (question: string, sessionObj?: any) => {
+    // Use provided session object or find active session
+    const session = sessionObj || activeAskSession;
+    if (!session) return;
+
+    const settings = loadSettings();
+
+    // Check API Key
+    if (!settings.apiKey || settings.apiKey.trim() === '') {
+      const errorMsg: AskMessage = {
+        id: crypto.randomUUID(),
+        role: "system",
+        content: language === 'de' ? 'Bitte API Key in den Einstellungen eintragen!' : 'Please enter API Key in settings!',
+        timestamp: new Date().toISOString(),
+        type: "stage_update",
+      };
+      addAskMessage(session.id, errorMsg);
+      return;
+    }
+
+    try {
+      // Connect to SSE for live updates first
+      askEventsHook.connect(session.id, (event) => {
+        console.log("[Ask] Event received:", event.type);
+
+        switch (event.type) {
+          case "starting":
+          case "stage_start":
+          case "scrape_start":
+          case "scrape_done": {
+            const msg: AskMessage = {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: event.message,
+              timestamp: new Date().toISOString(),
+              type: "stage_update",
+              stage: event.data?.stage,
+            };
+            addAskMessage(session.id, msg);
+            break;
+          }
+          case "stage_content": {
+            const content = event.data?.content ?? event.message;
+            if (!content) break;
+
+            if (event.data?.content) {
+              const sourceRegistry = event.data.sources?.reduce((acc, src, idx) => {
+                if (src.url) acc[idx + 1] = src.url;
+                return acc;
+              }, {} as Record<number, string>);
+
+              // C4 (Answer): Cache it, don't create message yet
+              if (event.data.stage === "C4") {
+                pendingAnswerRef.current = {
+                  sessionId: session.id,
+                  content: event.data.content,
+                  sourceRegistry,
+                };
+              }
+              // C6 (Verification): Combine with cached C4 to create ONE final message
+              else if (event.data.stage === "C6" && pendingAnswerRef.current) {
+                const finalMsg: AskMessage = {
+                  id: crypto.randomUUID(),
+                  role: "system",
+                  content: pendingAnswerRef.current.content,
+                  timestamp: new Date().toISOString(),
+                  type: "answer",
+                  stage: "C4",
+                  sourceRegistry: pendingAnswerRef.current.sourceRegistry,
+                  verification: {
+                    content: event.data.content,
+                    sourceRegistry,
+                  },
+                };
+                addAskMessage(session.id, finalMsg);
+                pendingAnswerRef.current = null;
+              }
+              // Other stages: Normal message
+              else {
+                const msg: AskMessage = {
+                  id: crypto.randomUUID(),
+                  role: "system",
+                  content: event.data.content,
+                  timestamp: new Date().toISOString(),
+                  type: "stage_update",
+                  stage: event.data.stage,
+                };
+                addAskMessage(session.id, msg);
+              }
+            } else {
+              const msg: AskMessage = {
+                id: crypto.randomUUID(),
+                role: "system",
+                content,
+                timestamp: new Date().toISOString(),
+                type: "stage_update",
+                stage: event.data?.stage,
+              };
+              addAskMessage(session.id, msg);
+            }
+            break;
+          }
+          case "log": {
+            const level = event.data?.level;
+            const details = event.data?.full && event.data?.full !== event.message ? `\n\n${event.data.full}` : "";
+            const prefix = level === "ERROR" ? "❌ " : "⚠️ ";
+            const msg: AskMessage = {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: `${prefix}${event.message}${details}`,
+              timestamp: new Date().toISOString(),
+              type: "stage_update",
+            };
+            addAskMessage(session.id, msg);
+            break;
+          }
+          case "scrape_progress":
+            // Use ref to track scrape message IDs
+            const phase = event.data?.phase;
+            const phaseKey = `phase${phase}` as 'phase1' | 'phase2';
+            const scrapeMessageId = scrapeMessageIdsRef.current[phaseKey];
+
+            if (scrapeMessageId) {
+              // Update existing message
+              updateAskMessage(session.id, scrapeMessageId, {
+                content: event.message,
+                progress: { done: event.data?.done || 0, total: event.data?.total || 0 },
+              });
+            } else {
+              // Create new message and track its ID
+              const newScrapeMsg: AskMessage = {
+                id: crypto.randomUUID(),
+                role: "system",
+                content: event.message,
+                timestamp: new Date().toISOString(),
+                type: "scrape_progress",
+                stage: `scrape_${phase}`,
+                progress: { done: event.data?.done || 0, total: event.data?.total || 0 },
+              };
+              scrapeMessageIdsRef.current[phaseKey] = newScrapeMsg.id;
+              addAskMessage(session.id, newScrapeMsg);
+            }
+            break;
+
+          case "done":
+            // Mark session as complete
+            setAskSessionsState(prev => {
+              const updated = {
+                ...prev,
+                sessions: prev.sessions.map(s =>
+                  s.id === session.id ? { ...s, completedAt: new Date().toISOString(), durationSeconds: event.data?.duration } : s
+                ),
+              };
+              saveAskSessions(updated);
+              return updated;
+            });
+            // Clear refs
+            scrapeMessageIdsRef.current = {};
+            pendingAnswerRef.current = null;
+            break;
+
+          case "error":
+            const errorMsg: AskMessage = {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: event.message,
+              timestamp: new Date().toISOString(),
+              type: "stage_update",
+            };
+            addAskMessage(session.id, errorMsg);
+            break;
+        }
+      });
+
+      // Call backend after SSE connect
+      const response = await fetch(`http://127.0.0.1:8420/ask/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: session.id,
+          question: question,
+          api_key: settings.apiKey,
+          language: settings.language,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}`);
+      }
+
+    } catch (error) {
+      askEventsHook.disconnect();
+      const errorMsg: AskMessage = {
+        id: crypto.randomUUID(),
+        role: "system",
+        content: `Failed to start Ask pipeline: ${error}`,
+        timestamp: new Date().toISOString(),
+        type: "stage_update",
+      };
+      addAskMessage(session.id, errorMsg);
+    }
+  }, [activeAskSession, addAskMessage, updateAskMessage, askEventsHook, language]);
+
   // Send message handler - Phase-basiert
   const handleSend = useCallback(
     async (content: string) => {
+      // === ASK MODE ROUTING ===
+      if (appMode === 'ask') {
+        // Auto-create Session wenn keine existiert (EXACT copy from Research Mode)
+        let sessionId = askSessionsState.activeSessionId;
+        let session = activeAskSession;
+
+        if (!sessionId) {
+          const newSession = createAskSession();
+          setAskSessionsState((prev) => ({
+            sessions: [newSession, ...prev.sessions],
+            activeSessionId: newSession.id,
+          }));
+          sessionId = newSession.id;
+          session = newSession;
+        }
+
+        if (!sessionId || !session) return;
+
+        // Create user message (EXACT copy from Research Mode)
+        const userMsg: AskMessage = {
+          id: crypto.randomUUID(),
+          role: "user",
+          content,
+          timestamp: new Date().toISOString(),
+          type: "user_question",
+        };
+        addAskMessage(sessionId, userMsg);
+
+        // Update session title with question
+        setAskSessionsState(prev => ({
+          ...prev,
+          sessions: prev.sessions.map(s =>
+            s.id === sessionId
+              ? { ...s, question: content.length > 60 ? content.substring(0, 57) + "..." : content, questionFull: content }
+              : s
+          ),
+        }));
+
+        // Start Ask Pipeline
+        await startAskPipeline(content, session);
+        return;
+      }
+
+      // === RESEARCH MODE (existing logic) ===
       // Auto-create Session wenn keine existiert
       let sessionId = sessionsState.activeSessionId;
       let session = activeSession;
@@ -567,10 +912,21 @@ export function Chat() {
 
       // === PHASE: INITIAL → Pipeline Step 1-3 ===
       if (phase === "initial") {
+        const settings = loadSettings();
+        if (!settings.apiKey || settings.apiKey.trim() === '') {
+          const errorMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: language === 'de' ? 'Bitte API Key in den Einstellungen eintragen!' : 'Please enter API Key in settings!',
+            timestamp: new Date().toISOString(),
+          };
+          addMessage(sessionId, errorMsg);
+          return;
+        }
+
         updateSession(sessionId, { title: t('researchRunning', language), phase: "clarifying" });
 
         // Pipeline mit Status-Callback für Live-Updates und Sources-Callback für URLs
-        const settings = loadSettings();
         const baseUrl = PROVIDER_CONFIG[settings.provider].baseUrl;
         const pipelineResult = await runPipeline(
           content,
@@ -725,7 +1081,7 @@ export function Chat() {
         }
       }
     },
-    [sessionsState.activeSessionId, activeSession, runPipeline, createPlan, revisePlan, updateSession, addMessage, addLogMessage]
+    [sessionsState.activeSessionId, activeSession, askSessionsState, activeAskSession, appMode, runPipeline, createPlan, revisePlan, updateSession, addMessage, addLogMessage, addAskMessage, startAskPipeline, setAskSessionsState, language]
   );
 
   // Handler: "Los geht's" Button → Deep Research starten
@@ -734,11 +1090,21 @@ export function Chat() {
 
     const sessionId = activeSession.id;
     const ctx = activeSession.contextState;
+    const settings = loadSettings();
+
+    if (!settings.apiKey || settings.apiKey.trim() === '') {
+      const errorMsg: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: language === 'de' ? 'Bitte API Key in den Einstellungen eintragen!' : 'Please enter API Key in settings!',
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(sessionId, errorMsg);
+      return;
+    }
 
     // Phase auf "researching" setzen
     updateSession(sessionId, { phase: "researching" });
-
-    const settings = loadSettings();
     const baseUrl = PROVIDER_CONFIG[settings.provider].baseUrl;
 
     // === ACADEMIC MODE: Hierarchische Bereiche mit Meta-Synthese ===
@@ -1149,16 +1515,33 @@ export function Chat() {
 
   return (
     <div className="h-screen flex bg-[var(--bg-primary)] overflow-hidden">
-      {/* Sidebar */}
-      <Sidebar
-        sessions={sessionsState.sessions}
-        activeSessionId={sessionsState.activeSessionId}
-        onSelectSession={handleSelectSession}
-        onNewSession={handleNewSession}
-        onDeleteSession={handleDeleteSession}
-        onRenameSession={handleRenameSession}
-        language={language}
-      />
+      {/* Conditional Sidebar */}
+      {appMode === 'research' ? (
+        <Sidebar
+          sessions={sessionsState.sessions}
+          activeSessionId={sessionsState.activeSessionId}
+          onSelectSession={handleSelectSession}
+          onNewSession={handleNewSession}
+          onDeleteSession={handleDeleteSession}
+          onRenameSession={handleRenameSession}
+          language={language}
+        />
+      ) : (
+        <AskSidebar
+          sessions={askSessionsState.sessions}
+          activeSessionId={askSessionsState.activeSessionId}
+          language={language}
+          onSelectSession={(id) => {
+            setAskSessionsState((prev) => {
+              const updated = { ...prev, activeSessionId: id };
+              saveAskSessions(updated);
+              return updated;
+            });
+          }}
+          onNewQuestion={handleNewAskQuestion}
+          onDeleteSession={deleteAskSession}
+        />
+      )}
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -1181,11 +1564,19 @@ export function Chat() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Research Mode Toggle */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className={`transition-colors ${!academicMode ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>
-                {t('normal', language)}
-              </span>
+            {/* Mode Toggle (Research/Ask) */}
+            <ModeToggle
+              appMode={appMode}
+              onToggle={handleModeToggle}
+              language={language}
+            />
+
+            {/* Research Mode Toggle (only in Research Mode) */}
+            {appMode === 'research' && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className={`transition-colors ${!academicMode ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>
+                  {t('normal', language)}
+                </span>
               <button
                 onClick={handleAcademicToggle}
                 className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
@@ -1202,7 +1593,8 @@ export function Chat() {
               <span className={`transition-colors ${academicMode ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>
                 {t('academic', language)}
               </span>
-            </div>
+              </div>
+            )}
 
             {/* Export Buttons */}
             {activeSession?.phase === 'done' && (
@@ -1254,21 +1646,45 @@ export function Chat() {
         )}
 
         {/* Messages */}
-        <MessageList
-          messages={displayMessages}
-          loading={loading}
-          onStartResearch={handleStartResearch}
-          onEditPlan={handleEditPlan}
-          onRecoverSynthesis={handleRecoverSynthesis}
-          showPlanButtons={activeSession?.phase === "planning"}
-          showRecoveryButton={activeSession?.phase === "researching" && !loading}
-          currentStatus={currentStatus}
-          sessionPhase={activeSession?.phase}
-          language={language}
-        />
+        {appMode === 'research' ? (
+          <MessageList
+            messages={displayMessages}
+            loading={loading}
+            onStartResearch={handleStartResearch}
+            onEditPlan={handleEditPlan}
+            onRecoverSynthesis={handleRecoverSynthesis}
+            showPlanButtons={activeSession?.phase === "planning"}
+            showRecoveryButton={activeSession?.phase === "researching" && !loading}
+            currentStatus={currentStatus}
+            sessionPhase={activeSession?.phase}
+            language={language}
+          />
+        ) : (
+          <MessageList
+            messages={activeAskSession?.messages || []}
+            loading={false}
+            onStartResearch={() => {}}
+            onEditPlan={() => {}}
+            onRecoverSynthesis={() => {}}
+            showPlanButtons={false}
+            showRecoveryButton={false}
+            currentStatus=""
+            sessionPhase="initial"
+            language={language}
+          />
+        )}
 
         {/* Input */}
-        <InputBar onSend={handleSend} disabled={loading || !connected} language={language} />
+        <InputBar
+          onSend={handleSend}
+          disabled={loading || !connected}
+          language={language}
+          placeholder={
+            appMode === 'ask'
+              ? t('askPlaceholder', language)
+              : t('startResearch', language)
+          }
+        />
       </div>
 
       {/* Settings Modal */}

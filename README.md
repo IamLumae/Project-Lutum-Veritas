@@ -20,7 +20,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"/>
-  <img src="https://img.shields.io/badge/Version-1.2.4-green.svg" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.3.0-green.svg" alt="Version"/>
   <img src="https://img.shields.io/badge/Platform-Windows-lightgrey.svg" alt="Platform"/>
   <img src="https://img.shields.io/badge/Python-3.11+-yellow.svg" alt="Python"/>
 </p>
@@ -167,6 +167,51 @@ Hierarchical research with autonomous areas:
 - **Evidence Grading**: Rate source quality (Level I-VII)
 - **Claim Audit Tables**: Confidence ratings for every claim
 - **200,000+ character outputs**: Full academic depth, no shortcuts
+
+### 🎯 Ask Mode - NEW in v1.3.0
+
+**Quick answers. Verified facts. No hallucinations.**
+
+<p align="center">
+  <img src="assets/ask-mode-demo.gif" alt="Ask Mode Demo - 6-Stage Pipeline with Verification" width="900"/>
+</p>
+
+<p align="center">
+  <em>Ask Mode workflow: Question → C1-C6 stages → Verified Answer with Citations</em>
+</p>
+
+The new Deep Question mode bridges the gap between chat and Deep Research. It's the tool you keep open when your question isn't "big enough" for a 20-minute deep dive, but you need more than an unverified chat response based on outdated, biased training data.
+
+**The difference:**
+- **Regular Chat**: No verification. No live search. Answers from stale training data.
+- **Ask Mode**: Every answer is researched, sourced, and self-verified against a second round of sources.
+
+**When you need a real answer on the first try: this is your mode.**
+
+#### Features
+- **6-Stage Pipeline**: Intent → Knowledge → Search → Scrape → Answer → Verify → Fact-Check (~70-90s)
+- **Dual-Scraping Phases**: First scrape for answer, second scrape for verification
+- **Citation System**: Inline citations [1], [2] for sources + [V1], [V2] for verification
+- **Claim Auditing**: Every claim is fact-checked against additional sources
+- **Auto-Language Detection**: Responds in same language as your question
+- **Separate Sessions**: Ask sessions stored separately from Deep Research
+
+#### Cost
+**Cost? A joke. ~400 queries for $1.**
+
+| Stage | Cost per Query |
+|-------|----------------|
+| C1: Intent Analysis | $0.000839 |
+| C2: Knowledge Requirements | $0.000245 |
+| C3: Search Strategy | $0.000847 |
+| C4: Answer Synthesis | $0.000158 |
+| C5: Claim Audit | $0.000279 |
+| C6: Verification | $0.000049 |
+| **Total per Query** | **~$0.0024** |
+
+- **0.24 cents per answer**
+- **416 verified answers for $1**
+- Model: `google/gemini-2.5-flash-lite-preview-09-2025`
 
 ### 💻 Desktop App Features
 

@@ -12,12 +12,13 @@ interface InputBarProps {
   onSend: (message: string) => void;
   disabled: boolean;
   language: Language;
+  placeholder?: string;
 }
 
 const MIN_HEIGHT = 48; // Standard-Höhe in px
 const MAX_HEIGHT = 200; // Maximale Höhe bevor Scroll
 
-export function InputBar({ onSend, disabled, language }: InputBarProps) {
+export function InputBar({ onSend, disabled, language, placeholder }: InputBarProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -61,7 +62,7 @@ export function InputBar({ onSend, disabled, language }: InputBarProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={t('startResearch', language)}
+          placeholder={placeholder || t('startResearch', language)}
           disabled={disabled}
           rows={1}
           className="flex-1 bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border)] rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 placeholder:text-[var(--text-secondary)] overflow-y-auto"

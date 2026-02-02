@@ -1,5 +1,59 @@
 # Lutum Veritas - Patch Notes
 
+## v1.3.0 (2026-02-02)
+
+### 🎯 NEW FEATURE: Ask Mode - Deep Question Pipeline
+
+**Fast, Verified Answers with Dual-Scraping Verification System**
+
+Ask Mode is a new research mode optimized for **quick, fact-checked answers** to specific questions. Unlike Deep Research (which explores topics comprehensively), Ask Mode focuses on **speed + accuracy + verification**.
+
+#### How It Works
+- **6-Stage Pipeline** (~70-90 seconds per question)
+  - C1: Intent Analysis - Understands what you're asking
+  - C2: Knowledge Requirements - Identifies needed information
+  - C3: Search Strategy - Generates 10 targeted search queries
+  - **SCRAPE Phase 1** - Parallel scraping of 10 URLs
+  - C4: Answer Synthesis - Creates comprehensive answer with citations [1], [2], [3]
+  - C5: Claim Audit - Identifies claims needing verification
+  - **SCRAPE Phase 2** - Scrapes 10 additional verification sources
+  - C6: Verification Report - Fact-checks each claim with [V1], [V2] citations
+
+#### UI Features
+- **Mode Toggle** - Switch between Deep Research ↔ Ask Mode in header
+- **Separate Sidebars** - Ask sessions stored separately from Research sessions
+- **Live Progress** - Real-time stage updates with scraping progress (0/10 → 10/10)
+- **Citation System** - Inline citations [1], [2] for sources + [V1], [V2] for verification
+- **Persistent State** - Sessions survive app restart, can switch between sessions mid-research
+
+#### Technical Details
+- **Model:** `google/gemini-2.5-flash-lite-preview-09-2025` (fast + cheap)
+- **Backend:** New `/ask` routes with SSE streaming
+- **Frontend:** Dual-state management (Research + Ask sessions isolated)
+- **Storage:** IndexedDB persistence for both modes
+
+#### Language Support
+- Automatic language detection from user query
+- Supports English, German (and other languages)
+- UI translations for status messages
+
+#### Bug Fixes
+- **Critical:** Fixed Ask Mode routing bug - messages were landing in Research Mode instead of Ask Mode due to stale `useCallback` dependencies
+- Added `appMode`, `askSessionsState`, `activeAskSession`, `addAskMessage`, `startAskPipeline`, `setAskSessionsState`, `language` to `handleSend` dependencies
+
+#### Files Changed
+- `lutum-backend/routes/ask.py` (new, 716 lines) - Ask Mode endpoints
+- `lutum-desktop/src/components/Chat.tsx` - Dual-mode routing + state management
+- `lutum-desktop/src/components/AskSidebar.tsx` (new) - Ask sessions sidebar
+- `lutum-desktop/src/hooks/useAskEvents.ts` (new) - SSE hook for live updates
+- `lutum-desktop/src/stores/askSessions.ts` (new) - Ask session persistence
+- `deep_question_pipeline.py` (new) - Core pipeline logic
+
+#### Known Issues
+- Deep Research recovery ("Resume Session") does not work - see KNOWN_BUGS.md
+
+---
+
 ## v1.2.6 (2026-02-01)
 
 ### Dossier Key Learnings Parser Fix

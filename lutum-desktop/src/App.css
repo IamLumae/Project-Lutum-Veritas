@@ -15,6 +15,9 @@
   --text-secondary: #4b5563;
   --border: #d1d5db;
   --accent: #3b82f6;
+  /* Mode-specific accents */
+  --accent-research: #3b82f6;
+  --accent-ask: #14b8a6;
 }
 
 .dark {
@@ -26,6 +29,18 @@
   --text-secondary: #a1a1aa;
   --border: #3f3f46;
   --accent: #60a5fa;
+  /* Mode-specific accents */
+  --accent-research: #60a5fa;
+  --accent-ask: #2dd4bf;
+}
+
+/* Active Mode CSS Classes */
+.mode-research {
+  --accent-active: var(--accent-research);
+}
+
+.mode-ask {
+  --accent-active: var(--accent-ask);
 }
 
 body {

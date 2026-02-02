@@ -1,14 +1,14 @@
 {
   "name": "lutum-desktop",
   "private": true,
-  "version": "1.2.1",
+  "version": "1.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "release": "tauri build && powershell -Command \"Copy-Item 'src-tauri/target/release/bundle/nsis/*.exe' '../dist/LutumVeritas-Frontend-Setup.exe' -Force\""
+    "release": "powershell -ExecutionPolicy Bypass -File ./archive-build.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
