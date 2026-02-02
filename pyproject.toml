@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lutum-veritas"
+version = "1.2.4"
+description = "Open Source Deep Research Engine"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0" }
+authors = [
+  { name = "IamLumae", email = "iamlumae@gmail.com" },
+]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "sse-starlette>=2.0.0",
+    "requests>=2.32.0",
+    "pydantic>=2.9.0",
+    "camoufox[geoip]>=0.4.0",
+    "trafilatura>=2.0.0",
+    "lxml>=5.0.0",
+    "beautifulsoup4>=4.12.0",
+    "ddgs>=7.0.0",
+    "search-engines-scraper-tasos>=0.6.0",
+]
+
+[project.scripts]
+lutum-veritas = "lutum_backend.main:start"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lutum", "lutum_backend"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"lutum_backend/www" = "lutum_backend/www"
+
+[tool.hatch.build.targets.sdist]
+include = ["lutum", "lutum_backend", "README.md", "LICENSE"]

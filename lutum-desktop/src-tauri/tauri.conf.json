@@ -35,7 +35,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../../lutum-backend": "backend",
+      "../../lutum_backend": "backend",
       "../../lutum": "lutum",
       "../../deep_question_pipeline.py": "backend/deep_question_pipeline.py"
     },

@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lutum.core.log_config import get_logger
 from lutum.core.api_config import set_api_config
-from services.lutum_service import LutumService
+from lutum_backend.services.lutum_service import LutumService
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["Chat"])

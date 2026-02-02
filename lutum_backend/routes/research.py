@@ -20,6 +20,14 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+if __package__ is None or __package__ == '':
+    # Script Mode (development)
+    sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+else:
+    # Package Mode (production / installed)
+    # lutum package is already installed, so we don't need to mess with sys.path for it
+    pass
+
 from lutum.core.log_config import get_logger, get_and_clear_log_buffer
 from lutum.core.api_config import get_api_headers, set_api_config
 from lutum.researcher.overview import get_overview_queries
