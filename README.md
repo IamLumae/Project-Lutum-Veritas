@@ -73,6 +73,51 @@ Independent comparison of Lutum Veritas vs. ChatGPT Deep Research vs. Perplexity
 
 ---
 
+## 🏆 Thank You, Community!
+
+<p align="center">
+  <img src="assets/champion.png" alt="Veritas Research - Research Without Permission" width="700">
+</p>
+
+### The First 3 Days
+
+**Released:** January 30, 2026 at 09:00
+**Current:** February 2, 2026 at 13:00
+
+**What you've accomplished:**
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/IamLumae/Project-Lutum-Veritas?style=for-the-badge&logo=github&color=yellow" alt="GitHub Stars">
+  <img src="https://img.shields.io/github/forks/IamLumae/Project-Lutum-Veritas?style=for-the-badge&logo=github&color=blue" alt="Forks">
+</p>
+
+📊 **Traffic Stats (Last 14 Days):**
+- 🔥 **289 Clones**
+- 👀 **343 Views**
+- 🎯 **11 Points on Hacker News**
+- 🌍 **Featured on:** Hacker News, ComputerBase.de, Hardwareluxx, Product Hunt, DeepLearning.AI Community
+
+---
+
+### You Made This Possible
+
+**In just 3 days, you've helped prove something important:**
+
+A solo developer with an idea can stand toe-to-toe with billion-dollar companies. You don't need permission to build something great. You need passion, code, and a community that believes.
+
+**Every star, every clone, every "this is exactly what I needed" message keeps this project going.**
+
+You're not just users. You're proof that **Research Without Permission** isn't just a tagline - it's a movement.
+
+**Thank you for standing against the giants.** 🚀
+
+---
+
+*Want to join the fight?*
+⭐ **Star the repo** · 🐛 **Report issues** · 💬 **Share with your network** · 🔨 **Contribute on GitHub**
+
+---
+
 ## What is Lutum Veritas?
 
 **Lutum Veritas** is a self-hosted Deep Research Engine that transforms any question into a comprehensive research document. Unlike Perplexity, ChatGPT, or Google's AI Overview, you bring your own API key and everything runs locally.
@@ -379,51 +424,6 @@ Need to use Lutum Veritas without AGPL obligations? Commercial licenses are avai
 **v1.2.4 Installer:**
 - **VirusTotal**: [0/64 detections](https://www.virustotal.com/gui/file/dd58e9fade08d8a0a64e2e0dce90850460ded45d4220d9e115be0e3320e030f7) ✅ **Clean**
 - **SHA256**: `dd58e9fade08d8a0a64e2e0dce90850460ded45d4220d9e115be0e3320e030f7`
-
----
-
-## 🏆 Thank You, Community!
-
-<p align="center">
-  <img src="assets/champion.png" alt="Veritas Research - Research Without Permission" width="700">
-</p>
-
-### The First 3 Days
-
-**Released:** January 30, 2026 at 09:00
-**Current:** February 2, 2026 at 13:00
-
-**What you've accomplished:**
-
-<p align="center">
-  <img src="https://img.shields.io/github/stars/IamLumae/Project-Lutum-Veritas?style=for-the-badge&logo=github&color=yellow" alt="GitHub Stars">
-  <img src="https://img.shields.io/github/forks/IamLumae/Project-Lutum-Veritas?style=for-the-badge&logo=github&color=blue" alt="Forks">
-</p>
-
-📊 **Traffic Stats (Last 14 Days):**
-- 🔥 **289 Clones**
-- 👀 **343 Views**
-- 🎯 **11 Points on Hacker News**
-- 🌍 **Featured on:** Hacker News, ComputerBase.de, Product Hunt, DeepLearning.AI Community
-
----
-
-### You Made This Possible
-
-**In just 3 days, you've helped us prove something important:**
-
-A solo developer with an idea can stand toe-to-toe with billion-dollar companies. You don't need permission to build something great. You need passion, code, and a community that believes.
-
-**Every star, every clone, every "this is exactly what I needed" message keeps us fighting.**
-
-You're not just users. You're proof that **Research Without Permission** isn't just a tagline - it's a movement.
-
-**Thank you for standing with us against the giants.** 🚀
-
----
-
-*Want to join the fight?*
-⭐ **Star the repo** · 🐛 **Report issues** · 💬 **Share with your network** · 🔨 **Contribute on GitHub**
 
 ---
 
