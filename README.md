@@ -186,6 +186,26 @@ npm install
 npm run tauri dev
 ```
 
+### Option C: Install via uv (Command Line)
+
+If you prefer command line tools and have [uv](https://github.com/astral-sh/uv) installed:
+
+```bash
+# Install as a tool
+uv tool install git+https://github.com/IamLumae/lutum-veritas.git
+
+# Run
+lutum-veritas
+```
+
+Or run directly without installation (ephemeral):
+
+```bash
+uvx --from git+https://github.com/IamLumae/lutum-veritas.git lutum-veritas
+```
+
+This will start the backend server and automatically open the web interface in your browser.
+
 ---
 
 ## Quick Start

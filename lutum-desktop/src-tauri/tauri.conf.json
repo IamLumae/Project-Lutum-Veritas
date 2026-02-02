@@ -35,7 +35,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../../lutum-backend": "backend",
+      "../../lutum_backend": "backend",
       "../../lutum": "lutum"
     },
     "windows": {
