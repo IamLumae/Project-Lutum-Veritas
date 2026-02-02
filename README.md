@@ -466,9 +466,9 @@ Need to use Lutum Veritas without AGPL obligations? Commercial licenses are avai
 
 ## Security
 
-**v1.2.4 Installer:**
-- **VirusTotal**: [0/64 detections](https://www.virustotal.com/gui/file/dd58e9fade08d8a0a64e2e0dce90850460ded45d4220d9e115be0e3320e030f7) ✅ **Clean**
-- **SHA256**: `dd58e9fade08d8a0a64e2e0dce90850460ded45d4220d9e115be0e3320e030f7`
+**v1.3.0 Installer:**
+- **VirusTotal**: [0/65 detections](https://www.virustotal.com/gui/file/96faa40b63150632a96486086a2a778a4ec8a19b31dd06907d5178bb961fc287?nocache=1) ✅ **Clean**
+- **SHA256**: `96faa40b63150632a96486086a2a778a4ec8a19b31dd06907d5178bb961fc287`
 
 ---
 
