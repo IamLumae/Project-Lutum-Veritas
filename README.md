@@ -21,7 +21,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"/>
   <img src="https://img.shields.io/badge/Version-1.3.0-green.svg" alt="Version"/>
-  <img src="https://img.shields.io/badge/Platform-Windows-lightgrey.svg" alt="Platform"/>
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg" alt="Platform"/>
   <img src="https://img.shields.io/badge/Python-3.11+-yellow.svg" alt="Python"/>
 </p>
 
@@ -120,7 +120,7 @@ You're not just users. You're proof that **Research Without Permission** isn't j
 
 ## What is Lutum Veritas?
 
-**Lutum Veritas** is a self-hosted Deep Research Engine that transforms any question into a comprehensive research document. Unlike Perplexity, ChatGPT, or Google's AI Overview, you bring your own API key and everything runs locally.
+**Lutum Veritas** is a self-hosted Deep Research Engine that transforms any question into a comprehensive research document. Unlike Perplexity, ChatGPT, or Google's AI Overview, you bring your own API key and everything runs locally on your machine - **Windows, macOS, or Linux**.
 
 ### Why Use This?
 
@@ -131,6 +131,7 @@ You're not just users. You're proof that **Research Without Permission** isn't j
 | **Black-box results** | See every source, every step, full transparency |
 | **Bot detection blocks** | Camoufox scraper with 0% detection rate |
 | **No local control** | Runs 100% on your machine |
+| **Platform locked** | Works on Windows, macOS, and Linux |
 
 ---
 
@@ -238,8 +239,9 @@ Powered by **Camoufox** - a hardened Firefox fork that bypasses:
 
 ## Installation
 
-### Option A: Download Installer (Recommended)
+### Option A: Download Windows Installer (Easiest for Windows)
 
+**Platform:** Windows only
 **Requirements:** Python 3.11+ installed ([python.org](https://python.org/downloads))
 
 1. Download `Lutum Veritas_1.2.4_x64-setup.exe` from [Releases](../../releases)
@@ -253,8 +255,38 @@ Powered by **Camoufox** - a hardened Firefox fork that bypasses:
 
 > **Note:** The backend starts automatically when you open the app. No separate process to manage.
 
-### Option B: Build from Source
+### Option B: Install via uv/uvx (Cross-Platform)
 
+**Platform:** Windows, macOS, Linux
+**Requirements:** [uv](https://github.com/astral-sh/uv) package manager
+
+This is the **recommended method for macOS and Linux users**, and also works great on Windows if you prefer command-line tools.
+
+#### Install and Run:
+
+```bash
+# Option 1: Install as a persistent tool
+uv tool install git+https://github.com/IamLumae/lutum-veritas.git
+
+# Then run anytime with:
+lutum-veritas
+```
+
+```bash
+# Option 2: Run directly without installation (ephemeral)
+uvx --from git+https://github.com/IamLumae/lutum-veritas.git lutum-veritas
+```
+
+Both commands will:
+- Install all dependencies automatically
+- Start the backend server on `http://localhost:8420`
+- Open your browser to the web interface
+
+> **Tip:** Use `uv tool install` if you plan to use Lutum regularly. Use `uvx` for one-time runs or testing.
+
+### Option C: Build from Source (Developers)
+
+**Platform:** All platforms
 **Requirements:**
 - Python 3.11+
 - Node.js 18+
@@ -275,26 +307,6 @@ cd lutum-desktop
 npm install
 npm run tauri dev
 ```
-
-### Option C: Install via uv (Command Line)
-
-If you prefer command line tools and have [uv](https://github.com/astral-sh/uv) installed:
-
-```bash
-# Install as a tool
-uv tool install git+https://github.com/IamLumae/lutum-veritas.git
-
-# Run
-lutum-veritas
-```
-
-Or run directly without installation (ephemeral):
-
-```bash
-uvx --from git+https://github.com/IamLumae/lutum-veritas.git lutum-veritas
-```
-
-This will start the backend server and automatically open the web interface in your browser.
 
 ---
 
