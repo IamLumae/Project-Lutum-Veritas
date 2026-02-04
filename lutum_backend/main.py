@@ -16,6 +16,8 @@ import sys
 import os
 import subprocess
 import socket
+import time
+import threading
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -193,6 +195,31 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+# === IDLE TIMEOUT (nur CLI/UV Mode, nicht Desktop) ===
+IDLE_TIMEOUT_SECONDS = 30 * 60  # 30 Minuten
+_last_activity = time.time()
+
+
+def _reset_activity():
+    global _last_activity
+    _last_activity = time.time()
+
+
+def _idle_watchdog():
+    """Background Thread: Shutdown nach 30 Min Inaktivität."""
+    while True:
+        time.sleep(60)  # Check jede Minute
+        idle = time.time() - _last_activity
+        if idle >= IDLE_TIMEOUT_SECONDS:
+            logger.info("Idle timeout (%d min) - shutting down.", IDLE_TIMEOUT_SECONDS // 60)
+            os._exit(0)
+
+
+# Watchdog nur starten wenn NICHT frozen (= CLI/UV Mode)
+if not FROZEN:
+    _watchdog = threading.Thread(target=_idle_watchdog, daemon=True)
+    _watchdog.start()
+
 # Imports angepasst für Package vs Script Execution
 if __package__ is None or __package__ == '':
     # Script Mode (z.B. python backend/main.py)
@@ -225,6 +252,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# === ACTIVITY TRACKING MIDDLEWARE ===
+class ActivityTrackingMiddleware(BaseHTTPMiddleware):
+    """Reset idle timer on every request."""
+
+    async def dispatch(self, request: Request, call_next):
+        _reset_activity()
+        return await call_next(request)
+
+
 # === SECURITY HEADERS MIDDLEWARE ===
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
@@ -246,6 +282,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Activity Tracking (nur für idle timeout im CLI/UV Mode)
+if not FROZEN:
+    app.add_middleware(ActivityTrackingMiddleware)
 
 # CORS für Frontend - Lokale App, daher permissiv
 # Tauri apps use tauri://localhost origin
