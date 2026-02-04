@@ -269,7 +269,7 @@ This is the **recommended method for macOS and Linux users**, and also works gre
 
 ```bash
 # Option 1: Install as a persistent tool
-uv tool install git+https://github.com/IamLumae/lutum-veritas.git
+uv tool install git+https://github.com/IamLumae/Project-Lutum-Veritas.git
 
 # Then run anytime with:
 lutum-veritas
@@ -277,11 +277,12 @@ lutum-veritas
 
 ```bash
 # Option 2: Run directly without installation (ephemeral)
-uvx --from git+https://github.com/IamLumae/lutum-veritas.git lutum-veritas
+uvx --from git+https://github.com/IamLumae/Project-Lutum-Veritas.git lutum-veritas
 ```
 
 Both commands will:
 - Install all dependencies automatically
+- Download the Camoufox browser binary (required for scraping)
 - Start the backend server on `http://localhost:8420`
 - Open your browser to the web interface
 
@@ -297,12 +298,13 @@ Both commands will:
 
 ```bash
 # Clone
-git clone https://github.com/IamLumae/lutum-veritas.git
-cd lutum-veritas
+git clone https://github.com/IamLumae/Project-Lutum-Veritas.git
+cd Project-Lutum-Veritas
 
 # Backend
-cd lutum-backend
+cd lutum_backend
 pip install -r requirements.txt
+python -m camoufox fetch    # Download browser binary (required for scraping!)
 python main.py
 
 # Frontend (new terminal)
@@ -310,6 +312,24 @@ cd lutum-desktop
 npm install
 npm run tauri dev
 ```
+
+### Troubleshooting
+
+**Scraping not working?** The Camoufox scraper needs a browser binary downloaded separately. If scraping fails, open a terminal and run:
+
+```bash
+pip install camoufox[geoip]
+python -m camoufox fetch
+```
+
+**Dependencies missing?** Verify all backend dependencies are installed:
+
+```bash
+pip install -r requirements.txt
+python -m camoufox fetch
+```
+
+> The app checks for missing dependencies on startup and will attempt to install them automatically. If that fails, the commands above will fix it manually.
 
 ---
 
@@ -502,8 +522,8 @@ Need to use Lutum Veritas without AGPL obligations? Commercial licenses are avai
 ## Security
 
 **v1.3.0 Installer:**
-- **VirusTotal**: [0/65 detections](https://www.virustotal.com/gui/file/96faa40b63150632a96486086a2a778a4ec8a19b31dd06907d5178bb961fc287?nocache=1) ✅ **Clean**
-- **SHA256**: `96faa40b63150632a96486086a2a778a4ec8a19b31dd06907d5178bb961fc287`
+- **VirusTotal**: [0/66 detections](https://www.virustotal.com/gui/file/e4165c7dd165bba437ef0dda164ddf52b62df8a0c02f6edb003d01cf3e37f10c?nocache=1) ✅ **Clean**
+- **SHA256**: `e4165c7dd165bba437ef0dda164ddf52b62df8a0c02f6edb003d01cf3e37f10c`
 
 ---
 

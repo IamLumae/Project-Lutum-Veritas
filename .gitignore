@@ -83,3 +83,4 @@ output/
 *.spec
 
 /benchmark
+/Standalone Benchmark

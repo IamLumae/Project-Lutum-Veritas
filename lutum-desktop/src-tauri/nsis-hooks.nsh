@@ -39,6 +39,22 @@
 
     ${If} $0 != 0
       MessageBox MB_OK "Dependencies Installation fehlgeschlagen.$\n$\nBitte manuell ausführen:$\npip install -r requirements.txt"
+      Goto skip_deps
+    ${EndIf}
+  ${EndIf}
+
+  ; Camoufox Browser Binary herunterladen (KRITISCH für Scraping!)
+  DetailPrint "Lade Camoufox Browser herunter (kann 1-2 Minuten dauern)..."
+  nsExec::ExecToLog 'python -m camoufox fetch'
+  Pop $0
+
+  ${If} $0 != 0
+    ; Fallback: py launcher
+    nsExec::ExecToLog 'py -3 -m camoufox fetch'
+    Pop $0
+
+    ${If} $0 != 0
+      MessageBox MB_OK "Camoufox Browser Download fehlgeschlagen.$\n$\nBitte manuell ausführen:$\npython -m camoufox fetch"
     ${EndIf}
   ${EndIf}
 

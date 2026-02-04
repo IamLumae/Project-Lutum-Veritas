@@ -146,11 +146,6 @@ if not FROZEN:
                 ])
                 logger.info("Dependencies installiert!")
 
-                if any("camoufox" in m for m in missing):
-                    logger.info("Lade Camoufox Browser herunter...")
-                    subprocess.check_call([sys.executable, "-m", "camoufox", "fetch"])
-                    logger.info("Camoufox Browser ready!")
-
                 logger.info("Dependencies installiert - bitte Backend neu starten!")
                 logger.info("Drücke Enter und starte dann erneut.")
                 input()
@@ -160,7 +155,34 @@ if not FROZEN:
                 logger.error("pip install failed: %s", e)
                 logger.warning("Bitte manuell ausführen: pip install -r requirements.txt")
 
+    def ensure_camoufox_browser():
+        """Prüft ob Camoufox Browser Binary vorhanden ist, lädt sie ggf. herunter."""
+        try:
+            from camoufox.async_api import AsyncCamoufox
+        except ImportError:
+            return  # Package nicht installiert, wird oben behandelt
+
+        try:
+            # 'camoufox path' gibt den Pfad zum Binary aus - failet wenn keins da
+            result = subprocess.run(
+                [sys.executable, "-m", "camoufox", "path"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                raise FileNotFoundError("Browser binary missing")
+            logger.info("Camoufox Browser found: %s", result.stdout.strip())
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+            logger.info("Camoufox Browser Binary nicht gefunden - lade herunter...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "camoufox", "fetch"])
+                logger.info("Camoufox Browser ready!")
+            except subprocess.CalledProcessError as e:
+                logger.warning("Camoufox fetch failed: %s", e)
+                logger.warning("Scraping wird ohne Camoufox nicht funktionieren!")
+                logger.warning("Bitte manuell ausführen: python -m camoufox fetch")
+
     ensure_dependencies()
+    ensure_camoufox_browser()
 else:
     logger.info("Running as frozen executable - skipping dependency check")
 
