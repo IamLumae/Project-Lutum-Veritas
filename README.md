@@ -242,21 +242,21 @@ Powered by **Camoufox** - a hardened Firefox fork that bypasses:
 
 ## Installation
 
-### Option A: Download Windows Installer (Easiest for Windows)
+### Option A: Download Windows Installer (Easiest)
 
 **Platform:** Windows only
-**Requirements:** Python 3.11+ installed ([python.org](https://python.org/downloads))
+**Requirements:** None! Python is bundled in the installer.
 
-1. Download `Lutum Veritas_1.2.4_x64-setup.exe` from [Releases](../../releases)
-2. Run the installer
-   - If Python is not found, the installer will prompt you to install it
-   - Dependencies are installed automatically via pip
-3. Launch **Lutum Veritas** from your Start Menu
+1. Download `Lutum Veritas_1.3.0_x64-setup.exe` from [Releases](../../releases)
+2. Run the installer (~60 MB)
+3. **First launch**: The app downloads the Camoufox browser engine (~530 MB) automatically
+   - You'll see a progress bar at the top of the app
+   - Wait for it to complete before making your first query
 4. Select your **API Provider** in Settings (OpenRouter, OpenAI, Anthropic, Google Gemini, or HuggingFace)
 5. Enter your API Key
 6. Start researching!
 
-> **Note:** The backend starts automatically when you open the app. No separate process to manage.
+> **Note:** The backend starts automatically when you open the app. No separate process to manage. No Python installation required.
 
 ### Option B: Install via uv/uvx (Cross-Platform)
 
@@ -410,17 +410,19 @@ lutum-veritas/
 │   │   └── prompts/            # LLM prompts (Think, Pick, Dossier, Synthesis)
 │   └── scrapers/
 │       └── camoufox_scraper.py # Zero-detection web scraper
-├── lutum-backend/              # FastAPI server
-│   └── routes/
-│       └── research.py         # Research pipeline orchestrator
+├── lutum_backend/              # FastAPI server
+│   ├── routes/
+│   │   ├── ask.py              # Ask Mode pipeline (6-stage)
+│   │   └── research.py         # Research pipeline orchestrator
+│   └── main.py                 # Backend entry point
 ├── lutum-desktop/              # Tauri desktop app
 │   ├── src/
 │   │   ├── components/         # React components
 │   │   ├── hooks/              # useBackend API hook
 │   │   └── stores/             # Session state management
 │   └── src-tauri/
-│       ├── src/lib.rs          # Auto-start backend logic
-│       └── nsis-hooks.nsh      # Installer: Python check + pip install
+│       ├── src/lib.rs          # Auto-start embedded Python
+│       └── nsis-hooks.nsh      # Installer hooks
 ├── LICENSE                     # AGPL-3.0
 ├── NOTICE                      # Copyright & commercial licensing
 └── README.md                   # You are here
@@ -522,8 +524,8 @@ Need to use Lutum Veritas without AGPL obligations? Commercial licenses are avai
 ## Security
 
 **v1.3.0 Installer:**
-- **VirusTotal**: [0/66 detections](https://www.virustotal.com/gui/file/e4165c7dd165bba437ef0dda164ddf52b62df8a0c02f6edb003d01cf3e37f10c?nocache=1) ✅ **Clean**
-- **SHA256**: `e4165c7dd165bba437ef0dda164ddf52b62df8a0c02f6edb003d01cf3e37f10c`
+- **VirusTotal**: [1/60 detections](https://www.virustotal.com/gui/file/bcdfc1e96a783b35546edb65e3fe2b2b4e93322b254d459c7d8e97239bcae810?nocache=1) ✅ **Clean** (False positive from Jiangmin)
+- **SHA256**: `bcdfc1e96a783b35546edb65e3fe2b2b4e93322b254d459c7d8e97239bcae810`
 
 ---
 

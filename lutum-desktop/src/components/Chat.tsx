@@ -41,6 +41,14 @@ export function Chat() {
   const [sessionsState, setSessionsState] = useState<SessionsState>(loadSessions);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Camoufox Status State
+  const [camoufoxStatus, setCamoufoxStatus] = useState<{
+    ready: boolean;
+    downloading: boolean;
+    progress: number;
+    checked: boolean;
+  }>({ ready: false, downloading: false, progress: 0, checked: false });
+
   const { loading, error, connected, checkHealth, runPipeline, createPlan, revisePlan, runDeepResearch, runAcademicResearch, recoverSession, resumeSession } = useBackend();
 
   // Live-Status vom Streaming (ersetzt SSE)
@@ -95,6 +103,60 @@ export function Chat() {
   useEffect(() => {
     initDarkMode();
     initModeTheme();
+  }, []);
+
+  // Check Camoufox status on mount and start install if needed
+  useEffect(() => {
+    const checkCamoufox = async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8420/health/camoufox");
+        if (res.ok) {
+          const data = await res.json();
+          setCamoufoxStatus({
+            ready: data.ready,
+            downloading: data.downloading,
+            progress: data.progress || 0,
+            checked: true
+          });
+
+          // If not ready and not downloading, start installation
+          if (!data.ready && !data.downloading) {
+            await fetch("http://127.0.0.1:8420/health/camoufox/install", { method: "POST" });
+            setCamoufoxStatus(prev => ({ ...prev, downloading: true }));
+          }
+        }
+      } catch {
+        // Backend not ready yet, will retry
+      }
+    };
+
+    // Initial check
+    checkCamoufox();
+
+    // Poll every 2 seconds for progress updates
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("http://127.0.0.1:8420/health/camoufox");
+        if (res.ok) {
+          const data = await res.json();
+          setCamoufoxStatus({
+            ready: data.ready,
+            downloading: data.downloading,
+            progress: data.progress || 0,
+            checked: true
+          });
+
+          // Stop polling once ready
+          if (data.ready) {
+            clearInterval(interval);
+          }
+        }
+      } catch {
+        // Ignore errors during polling
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // EXPORT HANDLERS - Using Tauri native APIs
@@ -1545,6 +1607,32 @@ export function Chat() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Camoufox Download Banner */}
+        {camoufoxStatus.checked && !camoufoxStatus.ready && (
+          <div className="bg-amber-500/90 text-black px-4 py-3 text-center text-sm font-medium">
+            {camoufoxStatus.downloading ? (
+              <div className="flex flex-col items-center gap-2">
+                <span className="flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  {t('camoufoxDownloading', language)} ({camoufoxStatus.progress}%)
+                </span>
+                {/* Progress bar */}
+                <div className="w-64 h-2 bg-black/20 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-black/50 transition-all duration-300"
+                    style={{ width: `${camoufoxStatus.progress}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <span>{t('camoufoxNotReady', language)}</span>
+            )}
+          </div>
+        )}
+
         {/* Header */}
         <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
           <div className="flex items-center gap-3">
@@ -1677,12 +1765,14 @@ export function Chat() {
         {/* Input */}
         <InputBar
           onSend={handleSend}
-          disabled={loading || !connected}
+          disabled={loading || !connected || (camoufoxStatus.checked && !camoufoxStatus.ready)}
           language={language}
           placeholder={
-            appMode === 'ask'
-              ? t('askPlaceholder', language)
-              : t('startResearch', language)
+            camoufoxStatus.checked && !camoufoxStatus.ready
+              ? t('camoufoxWaitPlaceholder', language)
+              : appMode === 'ask'
+                ? t('askPlaceholder', language)
+                : t('startResearch', language)
           }
         />
       </div>

@@ -7,6 +7,11 @@ export type Language = 'de' | 'en';
 
 export const translations = {
   de: {
+    // Chat.tsx - Camoufox
+    camoufoxDownloading: "Browser-Engine wird heruntergeladen (~530 MB)",
+    camoufoxNotReady: "Browser-Engine wird vorbereitet...",
+    camoufoxWaitPlaceholder: "Bitte warten - Browser-Engine wird heruntergeladen...",
+
     // Chat.tsx
     noSessionActive: "Keine Session aktiv.",
     exportOnlyWhenDone: "Export nur möglich wenn Recherche abgeschlossen ist.\nAktueller Status: ",
@@ -108,6 +113,11 @@ export const translations = {
   },
 
   en: {
+    // Chat.tsx - Camoufox
+    camoufoxDownloading: "Downloading browser engine (~530 MB)",
+    camoufoxNotReady: "Preparing browser engine...",
+    camoufoxWaitPlaceholder: "Please wait - browser engine is downloading...",
+
     // Chat.tsx
     noSessionActive: "No session active.",
     exportOnlyWhenDone: "Export only available when research is complete.\nCurrent status: ",

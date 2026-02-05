@@ -80,7 +80,21 @@ output/
 ############################
 # PyInstaller (deprecated)
 ############################
-*.spec
+build/
+lutum-backend/
 
+############################
+# Embedded Python (build artifact)
+############################
+python-embed/
+
+############################
+# Installers (too large for git)
+############################
+dist/
+
+############################
+# Benchmarks (local only)
+############################
 /benchmark
 /Standalone Benchmark

@@ -35,9 +35,10 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../../lutum-backend": "backend",
+      "../../python-embed": "python",
+      "../../lutum_backend": "lutum_backend",
       "../../lutum": "lutum",
-      "../../deep_question_pipeline.py": "backend/deep_question_pipeline.py"
+      "../../deep_question_pipeline.py": "lutum_backend/deep_question_pipeline.py"
     },
     "windows": {
       "wix": null,

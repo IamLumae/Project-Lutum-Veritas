@@ -37,12 +37,15 @@ pub fn run() {
             let resource_dir = app.path().resource_dir()
                 .expect("Failed to get resource dir");
 
-            let backend_main = resource_dir.join("backend").join("main.py");
-            let backend_dir = resource_dir.join("backend");
+            let backend_main = resource_dir.join("lutum_backend").join("main.py");
+            let backend_dir = resource_dir.join("lutum_backend");
+            let python_exe = resource_dir.join("python").join("python.exe");
 
             log_to_file(&format!("Resource dir: {:?}", resource_dir));
             log_to_file(&format!("Backend main: {:?}", backend_main));
             log_to_file(&format!("Backend exists: {}", backend_main.exists()));
+            log_to_file(&format!("Python exe: {:?}", python_exe));
+            log_to_file(&format!("Python exists: {}", python_exe.exists()));
 
             if backend_main.exists() {
                 println!("Starting backend from: {:?}", backend_main);
@@ -53,9 +56,9 @@ pub fn run() {
                     .map(Stdio::from)
                     .unwrap_or(Stdio::null());
 
-                // Python hidden starten (CREATE_NO_WINDOW)
+                // Embedded Python hidden starten (CREATE_NO_WINDOW)
                 #[cfg(windows)]
-                let child = Command::new("python")
+                let child = Command::new(&python_exe)
                     .arg(&backend_main)
                     .current_dir(&backend_dir)
                     .stdout(Stdio::null())
@@ -79,28 +82,9 @@ pub fn run() {
                         log_to_file("Backend started successfully on port 8420");
                     }
                     Err(e) => {
-                        eprintln!("Failed to start backend: {}", e);
-                        log_to_file(&format!("Failed to start backend: {}", e));
-                        // Fallback: Versuche py launcher (Windows)
-                        #[cfg(windows)]
-                        {
-                            let fallback = Command::new("py")
-                                .args(["-3", backend_main.to_str().unwrap()])
-                                .current_dir(&backend_dir)
-                                .stdout(Stdio::null())
-                                .stderr(Stdio::null())
-                                .creation_flags(0x08000000)
-                                .spawn();
-
-                            if let Ok(process) = fallback {
-                                let state = app.state::<BackendProcess>();
-                                *state.0.lock().unwrap() = Some(process);
-                                println!("Backend started via py launcher");
-                                log_to_file("Backend started via py launcher");
-                            } else {
-                                log_to_file("Fallback py launcher also failed");
-                            }
-                        }
+                        eprintln!("Failed to start backend with embedded Python: {}", e);
+                        log_to_file(&format!("Failed to start backend with embedded Python: {}", e));
+                        // Embedded Python sollte immer da sein - kein Fallback mehr nötig
                     }
                 }
             } else {

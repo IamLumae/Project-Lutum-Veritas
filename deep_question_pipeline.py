@@ -558,7 +558,7 @@ Analyze the language of the user query above and respond in that same language.
 
 ---
 
-Based on the verification sources below, explain in first person the fact-check results.
+Based on the verification sources below, fact-check the AI answer.
 
 AI Answer:
 {c4_response}
@@ -568,21 +568,26 @@ Verification Sources:
 
 ---
 
-Format your response naturally, starting with:
-"Ich habe die Verifikationsquellen analysiert. Ergebnis:" (if German)
-or
-"I have analyzed the verification sources. Result:" (if English)
+FORMAT (MANDATORY - follow exactly!):
 
-Then list each claim with its verification status:
-[OK] [Claim]: Verified - [evidence with [V1], [V2] citations]
-[NO] [Claim]: Contradicted - [evidence with [V1], [V2] citations]
-[??] [Claim]: Uncertain - [explanation]
+1) Start with a brief summary of what you verified.
 
-Use [V1], [V2], [V3] etc. to cite verification sources.
+2) For each major claim, write:
+   - **Claim:** [the claim]
+   - **Status:** CONFIRMED / CONTRADICTED / UNCERTAIN
+   - **Evidence:** [cite with [V1], [V2] etc.]
+
+3) END your response with EXACTLY ONE of these lines (on its own line):
+   Validated: Yes
+   OR
+   Validated: No
+
+Use "Validated: Yes" if the main claims are confirmed or mostly confirmed.
+Use "Validated: No" if significant contradictions were found.
 
 ---
 
-REMINDER: Respond in the same language as the user query above. Without exception."""
+REMINDER: Respond in the same language as the user query above. The "Validated: Yes/No" line must be in English regardless of response language."""
 
         c6_response = self._call_openrouter(c6_prompt, "C6_Verification_Report")
 

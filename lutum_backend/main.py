@@ -21,6 +21,25 @@ import threading
 from pathlib import Path
 from contextlib import asynccontextmanager
 
+
+def _strip_unc_prefix(path_str: str) -> str:
+    """Remove Windows extended path prefix \\\\?\\ if present."""
+    if path_str.startswith('\\\\?\\'):
+        return path_str[4:]
+    return path_str
+
+
+# === FIX WINDOWS UNC PATHS ===
+# Tauri startet mit \\?\ prefixed paths die manche Python packages brechen
+# Normalisiere sys.executable und __file__ SOFORT
+if sys.platform == 'win32':
+    sys.executable = _strip_unc_prefix(sys.executable)
+    if __file__.startswith('\\\\?\\'):
+        # __file__ ist readonly, aber wir können os.chdir zum normalisierten Pfad machen
+        _script_dir = _strip_unc_prefix(str(Path(__file__).parent))
+        os.chdir(_script_dir)
+
+
 # PyInstaller frozen check
 FROZEN = getattr(sys, 'frozen', False)
 
@@ -36,9 +55,14 @@ if FROZEN:
     BASE_PATH = Path(sys._MEIPASS)
     sys.path.insert(0, str(BASE_PATH))
 else:
-    # Development: Parent-Ordner für lutum
-    # Wenn wir als Package installiert sind, ist dies vielleicht nicht nötig, aber schadet nicht
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    # Development/Embedded: Parent-Ordner für lutum
+    # Normalisiere Pfad um Windows \\?\ UNC Prefix zu entfernen
+    base_path = Path(__file__).resolve().parent.parent
+    # Windows extended path prefix entfernen falls vorhanden
+    base_str = str(base_path)
+    if base_str.startswith('\\\\?\\'):
+        base_str = base_str[4:]
+    sys.path.insert(0, base_str)
 
 from lutum.core.log_config import get_logger, setup_logging
 

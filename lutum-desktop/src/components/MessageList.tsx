@@ -607,11 +607,20 @@ function AskAnswerMessage({
 
   // Detect verification status from content
   const getVerificationStatus = (content: string): 'success' | 'warning' | 'error' => {
-    const lower = content.toLowerCase();
-    if (lower.includes('widersprüche') || lower.includes('contradictions') || lower.includes('fehler') || lower.includes('error')) {
+    // Primary check: Look for explicit "Validated: Yes/No" marker
+    if (content.includes('Validated: Yes')) {
+      return 'success';
+    }
+    if (content.includes('Validated: No')) {
       return 'error';
     }
-    if (lower.includes('warnung') || lower.includes('warning') || lower.includes('achtung') || lower.includes('caution')) {
+
+    // Fallback: keyword-based detection for older responses
+    const lower = content.toLowerCase();
+    if (lower.includes('widersprüche') || lower.includes('contradictions') || lower.includes('contradicted')) {
+      return 'error';
+    }
+    if (lower.includes('uncertain') || lower.includes('unsicher') || lower.includes('unklar')) {
       return 'warning';
     }
     return 'success';
