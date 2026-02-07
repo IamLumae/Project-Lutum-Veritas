@@ -235,21 +235,22 @@ Powered by **Camoufox** - a hardened Firefox fork that bypasses:
 
 ## Installation
 
-### Option A: Download Windows Installer (Easiest)
+### Option A: Full Installer (Easiest)
 
-**Platform:** Windows only
-**Requirements:** None! Python is bundled in the installer.
+> **[Direct Download: Lutum Veritas v1.3.0 (Windows x64)](https://github.com/IamLumae/Project-Lutum-Veritas/releases/download/1.3.0/Lutum.Veritas_1.3.0_x64-setup.exe)**
 
-1. Download `Lutum Veritas_1.3.0_x64-setup.exe` from [Releases](../../releases)
-2. Run the installer (~60 MB)
-3. **First launch**: The app downloads the Camoufox browser engine (~530 MB) automatically
+**Platform:** Windows 10/11 (64-bit)
+**Requirements:** None. Python and all dependencies are bundled.
+
+1. Download and run the installer (~96 MB)
+2. **First launch**: The app automatically downloads the Camoufox browser engine (~530 MB)
    - You'll see a progress bar at the top of the app
    - Wait for it to complete before making your first query
-4. Select your **API Provider** in Settings (OpenRouter, OpenAI, Anthropic, Google Gemini, or HuggingFace)
-5. Enter your API Key
-6. Start researching!
+3. Select your **API Provider** in Settings (OpenRouter, OpenAI, Anthropic, Google Gemini, or HuggingFace)
+4. Enter your API Key
+5. Start researching!
 
-> **Note:** The backend starts automatically when you open the app. No separate process to manage. No Python installation required.
+> **Note:** The backend starts automatically when you open the app. No separate process to manage. No Python installation required. Everything is self-contained.
 
 ### Option B: Install via uv/uvx (Cross-Platform)
 
@@ -281,7 +282,44 @@ Both commands will:
 
 > **Tip:** Use `uv tool install` if you plan to use Lutum regularly. Use `uvx` for one-time runs or testing.
 
-### Option C: Build from Source (Developers)
+### Option C: Manual Install (Vanilla)
+
+**Platform:** Windows, macOS, Linux
+**Requirements:** You manage Python and dependencies yourself.
+
+This option gives you full control. No bundled Python, no installer magic - just the source code and your own environment.
+
+#### Prerequisites
+
+| Dependency | Install Command |
+|-----------|----------------|
+| **Python 3.11+** | [Download](https://python.org/downloads) |
+| **Backend dependencies** | `pip install -r requirements.txt` |
+| **Camoufox browser** | `pip install camoufox[geoip]` then `python -m camoufox fetch` |
+
+#### Steps:
+
+```bash
+# Clone the repository
+git clone https://github.com/IamLumae/Project-Lutum-Veritas.git
+cd Project-Lutum-Veritas
+
+# Install Python dependencies
+cd lutum_backend
+pip install -r requirements.txt
+
+# Download the Camoufox browser binary (required for scraping!)
+pip install camoufox[geoip]
+python -m camoufox fetch
+
+# Start the backend
+python main.py
+# → Opens http://localhost:8420 in your browser
+```
+
+> **Note:** This method requires you to manage updates and dependencies manually. For automatic dependency management, use Option A or B instead.
+
+### Option D: Build from Source (Developers)
 
 **Platform:** All platforms
 **Requirements:**
@@ -297,7 +335,7 @@ cd Project-Lutum-Veritas
 # Backend
 cd lutum_backend
 pip install -r requirements.txt
-python -m camoufox fetch    # Download browser binary (required for scraping!)
+python -m camoufox fetch
 python main.py
 
 # Frontend (new terminal)
@@ -517,8 +555,9 @@ Need to use Lutum Veritas without AGPL obligations? Commercial licenses are avai
 ## Security
 
 **v1.3.0 Installer:**
-- **VirusTotal**: [1/60 detections](https://www.virustotal.com/gui/file/bcdfc1e96a783b35546edb65e3fe2b2b4e93322b254d459c7d8e97239bcae810?nocache=1) ✅ **Clean** (False positive from Jiangmin)
-- **SHA256**: `bcdfc1e96a783b35546edb65e3fe2b2b4e93322b254d459c7d8e97239bcae810`
+- **VirusTotal**: [0/61 detections](https://www.virustotal.com/gui/file-analysis/ZmM2OGRkM2JlZjRkMDZmNDg1Mzg2MGMxMzEzMDIzODI6MTc3MDUwMzI1Nw==) ✅ **Clean**
+- **SHA256**: `6df2610267d8704d3e32a4b0df51b284c095e629d2553843c5618376ef5689f6`
+- **Direct Download**: [Lutum Veritas_1.3.0_x64-setup.exe](https://github.com/IamLumae/Project-Lutum-Veritas/releases/download/1.3.0/Lutum.Veritas_1.3.0_x64-setup.exe)
 
 ---
 
