@@ -284,6 +284,8 @@ Both commands will:
 
 ### Option C: Manual Install (Vanilla)
 
+> **[Direct Download: Lutum Veritas Vanilla v1.3.1 (Windows x64, 5.5 MB)](https://github.com/IamLumae/Project-Lutum-Veritas/releases/download/1.3.0/Lutum.Veritas.Vanilla_1.3.1_x64-setup.exe)**
+
 **Platform:** Windows, macOS, Linux
 **Requirements:** You manage Python and dependencies yourself.
 
