@@ -165,6 +165,7 @@ def setup_logging(
     handlers.append(console_handler)
 
     # File Handler - optional (daily rotation)
+    # File handler ALWAYS logs at DEBUG for full diagnostics
     resolved_path = _resolve_log_path(log_file)
     if resolved_path:
         try:
@@ -177,16 +178,17 @@ def setup_logging(
                 encoding="utf-8",
                 delay=True
             )
-            file_handler.setLevel(level)
-            file_handler.setFormatter(logging.Formatter(log_format, DATE_FORMAT))
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(logging.Formatter(LOG_FORMAT_DEBUG, DATE_FORMAT))
             handlers.append(file_handler)
         except Exception as e:
             # Log-File kann nicht erstellt werden - nicht kritisch
             print(f"[WARNING] Log-File konnte nicht erstellt werden: {e}", file=sys.stderr)
 
     # Root Logger konfigurieren
+    # ALWAYS DEBUG so file handler gets everything, console handler filters by its own level
     root_logger = logging.getLogger("lutum")
-    root_logger.setLevel(level)
+    root_logger.setLevel(logging.DEBUG)
 
     # Alte Handler entfernen
     for handler in root_logger.handlers[:]:

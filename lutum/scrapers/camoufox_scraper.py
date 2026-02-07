@@ -87,7 +87,8 @@ class CamoufoxScraper(BaseScraper):
             return (None, "camoufox not installed")
 
         try:
-            async with self._camoufox(headless=True) as browser:
+            from camoufox import DefaultAddons
+            async with self._camoufox(headless=True, exclude_addons=[DefaultAddons.UBO]) as browser:
                 page = await browser.new_page()
 
                 self.logger.debug(f"Loading: {url}")
@@ -159,7 +160,8 @@ class CamoufoxScraper(BaseScraper):
 
         async def get_text():
             try:
-                async with self._camoufox(headless=True) as browser:
+                from camoufox import DefaultAddons
+                async with self._camoufox(headless=True, exclude_addons=[DefaultAddons.UBO]) as browser:
                     page = await browser.new_page()
                     await page.goto(
                         url,
@@ -289,7 +291,8 @@ async def scrape_urls_batch(urls: list[str], timeout: int = 15, max_concurrent: 
 
     browser = None
     try:
-        browser = await AsyncCamoufox(headless=True).start()
+        from camoufox import DefaultAddons
+        browser = await AsyncCamoufox(headless=True, exclude_addons=[DefaultAddons.UBO]).start()
         logger.info(f"Scraping {total} URLs (sequential, {timeout}s timeout each)...")
 
         page = await browser.new_page()

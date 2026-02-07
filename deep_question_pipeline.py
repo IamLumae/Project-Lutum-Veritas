@@ -17,6 +17,9 @@ from pathlib import Path
 from typing import List, Dict, Any
 import requests
 
+from lutum.core.log_config import get_logger
+logger = get_logger("lutum.deep_question_pipeline")
+
 # Model
 MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
 
@@ -62,7 +65,7 @@ class DeepQuestionPipeline:
             "model": MODEL
         })
 
-        print(f"\n[{stage}] Calling OpenRouter...")
+        logger.info(f"[{stage}] Calling OpenRouter...")
 
         # Make request
         response = requests.post(
@@ -87,7 +90,7 @@ class DeepQuestionPipeline:
             "tokens": result.get("usage", {})
         })
 
-        print(f"[{stage}] OK Response received ({len(content)} chars)")
+        logger.info(f"[{stage}] OK Response received ({len(content)} chars)")
 
         return content
 
@@ -122,7 +125,7 @@ class DeepQuestionPipeline:
             return formatted
 
         except Exception as e:
-            print(f"    DDG search failed: {str(e)[:50]}")
+            logger.error(f"DDG search failed: {clean_query[:30]} - {e}")
             return []
 
     async def _scrape_single_url_async(self, url: str, index: int, total: int) -> Dict[str, Any]:
@@ -131,13 +134,15 @@ class DeepQuestionPipeline:
         Browser opens, scrapes, closes immediately - no RAM leak!
         """
         from camoufox.async_api import AsyncCamoufox
+        from camoufox import DefaultAddons
 
-        print(f"    [{index}/{total}] Scraping: {url[:60]}...")
+        logger.info(f"[{index}/{total}] Scraping: {url[:60]}...")
 
         browser = None
         try:
             # Each URL gets own browser instance
-            browser = await AsyncCamoufox(headless=True).start()
+            # Exclude UBO addon - not needed for scraping, and download fails in frozen builds
+            browser = await AsyncCamoufox(headless=True, exclude_addons=[DefaultAddons.UBO]).start()
             page = await browser.new_page()
 
             await page.goto(
@@ -150,14 +155,14 @@ class DeepQuestionPipeline:
             text = await page.evaluate("document.body?.innerText || ''")
 
             if text and len(text.strip()) > 100:
-                print(f"    [{index}/{total}] OK: {len(text)} chars")
+                logger.info(f"[{index}/{total}] OK: {len(text)} chars")
                 return {
                     "url": url,
                     "content": text[:10000],
                     "success": True
                 }
             else:
-                print(f"    [{index}/{total}] FAIL: Empty")
+                logger.warning(f"[{index}/{total}] FAIL: Empty content from {url[:60]}")
                 return {
                     "url": url,
                     "content": "",
@@ -166,7 +171,7 @@ class DeepQuestionPipeline:
                 }
 
         except Exception as e:
-            print(f"    [{index}/{total}] FAIL: {str(e)[:50]}")
+            logger.error(f"[{index}/{total}] Scrape FAIL: {url[:40]} - {e}")
             return {
                 "url": url,
                 "content": "",
@@ -180,7 +185,7 @@ class DeepQuestionPipeline:
                 try:
                     await asyncio.wait_for(browser.close(), timeout=5.0)
                 except Exception as e:
-                    print(f"    [{index}/{total}] WARN: Browser close failed: {str(e)[:30]}")
+                    logger.warning(f"[{index}/{total}] Browser close failed: {str(e)[:30]}")
 
     async def _search_and_scrape_async(self, queries: List[str], stage: str = "SCRAPE", progress_callback=None) -> List[Dict[str, str]]:
         """
@@ -194,25 +199,25 @@ class DeepQuestionPipeline:
             stage: Stage name for logging
             progress_callback: Optional async callback(done: int, total: int) for progress updates
         """
-        print(f"\n[{stage}] DDG Search + PARALLEL Camoufox Scrape...")
+        logger.info(f"[{stage}] DDG Search + PARALLEL Camoufox Scrape...")
 
         try:
             from camoufox.async_api import AsyncCamoufox
 
             # Step 1: Search all queries on DDG
-            print(f"  Step 1: Searching DDG for {len(queries)} queries...")
+            logger.info(f"Step 1: Searching DDG for {len(queries)} queries...")
             all_urls = []
             for i, query in enumerate(queries, 1):
-                print(f"    [{i}/{len(queries)}] DDG: {query[:50]}...")
+                logger.debug(f"[{i}/{len(queries)}] DDG: {query[:50]}...")
                 results = await self._search_ddg_async(query, max_results=3)
 
                 # Take first URL from results
                 if results and len(results) > 0:
                     url = results[0]["url"]
                     all_urls.append(url)
-                    print(f"    [{i}/{len(queries)}] Found: {url[:60]}...")
+                    logger.debug(f"[{i}/{len(queries)}] Found: {url[:60]}...")
                 else:
-                    print(f"    [{i}/{len(queries)}] No results")
+                    logger.warning(f"[{i}/{len(queries)}] DDG: No results for '{query[:40]}'")
 
                 # Rate limit
                 if i < len(queries):
@@ -220,13 +225,13 @@ class DeepQuestionPipeline:
 
             # Limit to exactly 10 URLs
             all_urls = all_urls[:10]
-            print(f"  Step 1 Done: {len(all_urls)} URLs collected (limited to 10)")
+            logger.info(f"Step 1 Done: {len(all_urls)} URLs collected (limited to 10)")
 
             if not all_urls:
                 return []
 
             # Step 2: PARALLEL scrape with separate browser per URL
-            print(f"  Step 2: Scraping {len(all_urls)} URLs in PARALLEL (15s timeout each)...")
+            logger.info(f"Step 2: Scraping {len(all_urls)} URLs in PARALLEL (15s timeout each)...")
 
             # Create scraping tasks (each with own browser)
             if progress_callback:
@@ -255,7 +260,7 @@ class DeepQuestionPipeline:
                 ]
                 results = await asyncio.gather(*tasks)
 
-            print(f"  Step 2 Done: {sum(1 for r in results if r['success'])}/{len(results)} successful")
+            logger.info(f"Step 2 Done: {sum(1 for r in results if r['success'])}/{len(results)} successful")
 
             # Log
             self.flow_log.append({
@@ -271,7 +276,7 @@ class DeepQuestionPipeline:
             return results
 
         except Exception as e:
-            print(f"  ERROR: Search+Scrape failed: {str(e)[:100]}")
+            logger.error(f"Search+Scrape FAILED: {str(e)}")
             self.flow_log.append({
                 "stage": stage,
                 "type": "scraping",
@@ -334,12 +339,7 @@ class DeepQuestionPipeline:
     def run(self) -> Dict[str, Any]:
         """Run the complete Deep Question pipeline."""
 
-        print(f"\n{'='*60}")
-        print(f"DEEP QUESTION PIPELINE")
-        print(f"{'='*60}")
-        print(f"User Query: {self.user_query}")
-        print(f"Session ID: {self.session_id}")
-        print(f"{'='*60}\n")
+        logger.info(f"DEEP QUESTION PIPELINE - Query: {self.user_query} - Session: {self.session_id}")
 
         # =====================================================================
         # C1: Intent Analysis
@@ -442,7 +442,7 @@ REMINDER: Respond in the same language as the user query above. Without exceptio
 
         # Parse search queries
         search_queries = self._parse_numbered_list(c3_response)
-        print(f"\n[Parser] Extracted {len(search_queries)} search queries")
+        logger.info(f"[Parser] Extracted {len(search_queries)} search queries")
 
         # =====================================================================
         # SCRAPING PHASE 1: Main Research
@@ -540,7 +540,7 @@ REMINDER: Respond in the same language as the user query above. Without exceptio
             # Fallback: parse as numbered list
             verification_queries = self._parse_numbered_list(c5_response)
 
-        print(f"\n[Parser] Extracted {len(verification_queries)} verification queries")
+        logger.info(f"[Parser] Extracted {len(verification_queries)} verification queries")
 
         # =====================================================================
         # SCRAPING PHASE 2: Verification
@@ -612,11 +612,7 @@ REMINDER: Respond in the same language as the user query above. The "Validated: 
         # Save flow log
         log_path = self._save_flow_log()
 
-        print(f"\n{'='*60}")
-        print(f"PIPELINE COMPLETE")
-        print(f"{'='*60}")
-        print(f"Flow log saved: {log_path}")
-        print(f"{'='*60}\n")
+        logger.info(f"PIPELINE COMPLETE - Flow log saved: {log_path}")
 
         return {
             "user_query": self.user_query,
@@ -650,39 +646,17 @@ REMINDER: Respond in the same language as the user query above. The "Validated: 
 
 
 if __name__ == "__main__":
-    # Test queries
+    # Test queries - CLI mode uses print for console output
     test_queries = [
         "Hat Adolf Hitler sich selbst erschossen?",
         "War die Corona Impfung Betrug?",
         "Gehört Taiwan zu China?"
     ]
 
-    print("\n" + "="*60)
-    print("DEEP QUESTION PIPELINE - BATCH TEST RUN")
-    print("="*60)
-    print(f"Running {len(test_queries)} queries...")
-    print("="*60 + "\n")
-
-    results = []
+    print(f"DEEP QUESTION PIPELINE - BATCH TEST RUN ({len(test_queries)} queries)")
 
     for i, query in enumerate(test_queries, 1):
-        print(f"\n{'#'*60}")
-        print(f"# QUERY {i}/{len(test_queries)}")
-        print(f"{'#'*60}\n")
-
-        pipeline = DeepQuestionPipeline(query)
+        print(f"\n# QUERY {i}/{len(test_queries)}")
+        pipeline = DeepQuestionPipeline(query, api_key=os.environ.get("OPENROUTER_API_KEY", ""))
         result = pipeline.run()
-        results.append(result)
-
-        print(f"\n[RESULT {i}] Session: {result['session_id']}")
-        print(f"[RESULT {i}] Log: {result['flow_log_path']}\n")
-
-    print("\n" + "="*60)
-    print("BATCH COMPLETE - RESULTS SUMMARY")
-    print("="*60 + "\n")
-
-    for i, result in enumerate(results, 1):
-        print(f"Query {i}: {result['user_query']}")
-        print(f"  Session: {result['session_id']}")
-        print(f"  Log: {result['flow_log_path']}")
-        print()
+        print(f"[RESULT {i}] Session: {result['session_id']} Log: {result['flow_log_path']}")

@@ -1,6 +1,6 @@
 // Lutum Veritas - Tauri Entry Point
 // ==================================
-// Startet Backend (Python) hidden beim App-Start
+// Startet Backend (Frozen PyInstaller EXE) hidden beim App-Start
 
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -33,33 +33,29 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(BackendProcess(Mutex::new(None)))
         .setup(|app| {
-            // Backend main.py finden (im resources Ordner)
+            // Backend EXE finden (im resources Ordner)
             let resource_dir = app.path().resource_dir()
                 .expect("Failed to get resource dir");
 
-            let backend_main = resource_dir.join("lutum_backend").join("main.py");
-            let backend_dir = resource_dir.join("lutum_backend");
-            let python_exe = resource_dir.join("python").join("python.exe");
+            let backend_exe = resource_dir.join("backend").join("lutum-backend.exe");
+            let backend_dir = resource_dir.join("backend");
 
             log_to_file(&format!("Resource dir: {:?}", resource_dir));
-            log_to_file(&format!("Backend main: {:?}", backend_main));
-            log_to_file(&format!("Backend exists: {}", backend_main.exists()));
-            log_to_file(&format!("Python exe: {:?}", python_exe));
-            log_to_file(&format!("Python exists: {}", python_exe.exists()));
+            log_to_file(&format!("Backend exe: {:?}", backend_exe));
+            log_to_file(&format!("Backend exists: {}", backend_exe.exists()));
 
-            if backend_main.exists() {
-                println!("Starting backend from: {:?}", backend_main);
-                log_to_file(&format!("Starting backend from: {:?}", backend_main));
+            if backend_exe.exists() {
+                println!("Starting frozen backend from: {:?}", backend_exe);
+                log_to_file(&format!("Starting frozen backend from: {:?}", backend_exe));
 
-                // Log file für Backend stderr
+                // Log file für Backend stderr - wichtig für Debugging beim Kunden!
                 let log_file = File::create(backend_dir.join("backend_stderr.log"))
                     .map(Stdio::from)
                     .unwrap_or(Stdio::null());
 
-                // Embedded Python hidden starten (CREATE_NO_WINDOW)
+                // Frozen Backend hidden starten (CREATE_NO_WINDOW)
                 #[cfg(windows)]
-                let child = Command::new(&python_exe)
-                    .arg(&backend_main)
+                let child = Command::new(&backend_exe)
                     .current_dir(&backend_dir)
                     .stdout(Stdio::null())
                     .stderr(log_file)
@@ -67,8 +63,7 @@ pub fn run() {
                     .spawn();
 
                 #[cfg(not(windows))]
-                let child = Command::new("python3")
-                    .arg(&backend_main)
+                let child = Command::new(&backend_exe)
                     .current_dir(&backend_dir)
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
@@ -82,15 +77,21 @@ pub fn run() {
                         log_to_file("Backend started successfully on port 8420");
                     }
                     Err(e) => {
-                        eprintln!("Failed to start backend with embedded Python: {}", e);
-                        log_to_file(&format!("Failed to start backend with embedded Python: {}", e));
-                        // Embedded Python sollte immer da sein - kein Fallback mehr nötig
+                        eprintln!("Failed to start frozen backend: {}", e);
+                        log_to_file(&format!("Failed to start frozen backend: {}", e));
                     }
                 }
             } else {
-                eprintln!("Backend not found at {:?}", backend_main);
-                log_to_file(&format!("Backend NOT FOUND at {:?}", backend_main));
+                eprintln!("Backend EXE not found at {:?}", backend_exe);
+                log_to_file(&format!("Backend EXE NOT FOUND at {:?}", backend_exe));
             }
+
+            // Show window after WebView had time to render the splash screen
+            let main_window = app.get_webview_window("main").unwrap();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+                let _ = main_window.show();
+            });
 
             Ok(())
         })

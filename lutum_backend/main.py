@@ -265,6 +265,15 @@ async def lifespan(app: FastAPI):
     """Startup und Shutdown Events."""
     logger.info("Lutum Veritas Backend starting...")
     logger.info("Server ready on http://localhost:8420")
+
+    # Auto-start Camoufox download in frozen mode if not installed
+    if FROZEN:
+        try:
+            from routes.health import auto_start_camoufox_download
+            auto_start_camoufox_download()
+        except Exception as e:
+            logger.error(f"Camoufox auto-download failed to start: {e}")
+
     yield
     logger.info("Lutum Veritas Backend shutting down...")
 

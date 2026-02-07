@@ -1,6 +1,6 @@
 [package]
 name = "lutum-desktop"
-version = "1.3.0"
+version = "1.3.1"
 description = "Lutum Veritas - Deep Research Tool"
 authors = ["Lutum"]
 edition = "2021"
