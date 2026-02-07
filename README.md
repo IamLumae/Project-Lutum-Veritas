@@ -554,10 +554,15 @@ Need to use Lutum Veritas without AGPL obligations? Commercial licenses are avai
 
 ## Security
 
-**v1.3.0 Installer:**
+**Full Installer (Python bundled, 96 MB):**
 - **VirusTotal**: [0/61 detections](https://www.virustotal.com/gui/file-analysis/ZmM2OGRkM2JlZjRkMDZmNDg1Mzg2MGMxMzEzMDIzODI6MTc3MDUwMzI1Nw==) ✅ **Clean**
 - **SHA256**: `6df2610267d8704d3e32a4b0df51b284c095e629d2553843c5618376ef5689f6`
 - **Direct Download**: [Lutum Veritas_1.3.0_x64-setup.exe](https://github.com/IamLumae/Project-Lutum-Veritas/releases/download/1.3.0/Lutum.Veritas_1.3.0_x64-setup.exe)
+
+**Vanilla Installer (System Python, 5.5 MB):**
+- **VirusTotal**: [3/72 detections](https://www.virustotal.com/gui/file-analysis/NTdlNmQyM2NjMGFkOGE0YjA4ZDg1NDNmZTY5NTYxNTI6MTc3MDUwNTA3MA==) ✅ **Clean** (False positives)
+- **SHA256**: `3f5c873c113b858233d6f3e5e711e47d1d993b2798e22d2363a0000bda52213c`
+- **Direct Download**: [Lutum Veritas Vanilla_1.3.1_x64-setup.exe](https://github.com/IamLumae/Project-Lutum-Veritas/releases/download/1.3.0/Lutum.Veritas.Vanilla_1.3.1_x64-setup.exe)
 
 ---
 
