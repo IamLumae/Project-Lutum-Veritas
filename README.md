@@ -87,11 +87,11 @@ Independent comparison of Lutum Veritas vs. ChatGPT Deep Research vs. Perplexity
 📊 **Traffic Stats:**
 | Metric | Count |
 |--------|-------|
-| ⭐ Stars | **50** |
-| 🍴 Forks | **6** |
-| 🔥 Clones | **452** |
-| 👀 Views | **1,296** |
-| 👥 Unique Visitors | **740** |
+| ⭐ Stars | **52** |
+| 🍴 Forks | **7** |
+| 🔥 Clones | **482** |
+| 👀 Views | **1,441** |
+| 👥 Unique Visitors | **783** |
 
 🌍 **Featured on:** Hacker News, ComputerBase.de, Hardwareluxx, Product Hunt, DeepLearning.AI Community
 
