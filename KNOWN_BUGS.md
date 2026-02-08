@@ -32,4 +32,25 @@
 
 ---
 
+### Negative or Zero Source Citation Numbers in Dossiers
+**Status:** Open (cosmetic)
+**Description:** In Deep Research dossiers, the "Best Sources" section sometimes shows negative or zero citation numbers like `[-1]`, `[0]`, `[-10]` instead of proper positive references like `[1]`, `[2]`, `[3]`. The actual source content (URLs, descriptions) is still present — only the numbering is wrong.
+**Impact:** Cosmetic only. The research results and final synthesis are not affected. The sources are correctly used in the analysis, just incorrectly numbered in the per-point dossier display.
+**Workaround:** None needed. Ignore the citation numbers in individual dossiers — the final synthesis generates its own correct source registry.
+
+---
+
+## Expected Behavior (Not Bugs)
+
+### Occasional Search Timeouts
+Individual DuckDuckGo searches may timeout (`ConnectTimeout`). This is normal — the pipeline runs multiple search queries per research point and continues with whatever results it gets. A single timed-out query does not affect the overall research quality. No action needed.
+
+### Dead URLs During Scraping
+Errors like `NS_ERROR_UNKNOWN_HOST` or `Page.goto failed` during scraping mean a URL returned by the search engine no longer exists or the server is unreachable. This is expected — the internet changes constantly. The scraper skips dead URLs and continues with the remaining sources.
+
+### Minor LLM Formatting Deviations
+The AI models occasionally deviate from the exact requested output format (e.g. slightly different section headers, missing separators, inconsistent bullet styles). This does not affect research results — the parsing is robust enough to handle variations. The content and analysis quality remain unaffected.
+
+---
+
 *Last updated: 2026-02-08*
