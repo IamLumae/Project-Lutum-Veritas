@@ -59,15 +59,33 @@ This isn't an "alternative" to existing tools. This is proof that a solo dev wit
 
 ## 🔬 Benchmark Results
 
+### Ask Mode: SimpleQA Verified (Google DeepMind)
+
+Evaluated on the [SimpleQA Verified Benchmark](https://www.kaggle.com/benchmarks/deepmind/simpleqa-verified) — the standard benchmark for factual accuracy in LLMs. 47 models evaluated, hosted on Kaggle.
+
+**[📊 View Full Benchmark Report](https://dev.thelastrag.de/veritas_benchmark)** *(Interactive, EN/DE)*
+**[📄 Read the Paper (PDF)](https://dev.thelastrag.de/PAPER_Parametric_Hubris_2026.pdf)** *— "Parametric Hubris" (26 pages, 34 sources)*
+
+| Rank | System | F-Score | Fabrication Rate | Cost / 1,000 Queries |
+|------|--------|---------|------------------|-----------------------|
+| **#1** | **Veritas (Gemini 2.5 Flash Lite)** | **89.1%** | **0%** | **$0.20** |
+| #2 | Gemini 3 Pro Preview | 72.1% | ~88% | $19.10 |
+| #3 | GPT-5 | 51.6% | ~47% | $3.94 |
+| #4 | Claude Opus 4.5 | 39.0% | ~60% | $21.25 |
+
+- **0% fabrication rate** — zero invented answers across 100 evaluated questions
+- **6 errors** — all evidence-based misinterpretation (wrong fact from correct source), fully auditable
+- **9 honest refusals** — when data was insufficient, the system said so
+- Built on the **cheapest model on the market** at the time of evaluation
+
+> The cheapest model, constrained by mandatory retrieval, outperforms frontier systems costing 20–106x more per query. Architecture beats budget.
+
+### Deep Research: 4-Way Comparison
+
 Independent comparison of Lutum Veritas vs. ChatGPT Deep Research vs. Perplexity Pro vs. Gemini Advanced:
 
-**[📊 View Full Benchmark Report](https://veritas-test.neocities.org/)** *(German)*
+**[📊 View Deep Research Benchmark](https://veritas-test.neocities.org/)** *(German)*
 **[🌐 Auto-Translated Version (EN)](https://veritas--test-neocities-org.translate.goog/?_x_tr_sl=de&_x_tr_tl=en&_x_tr_hl=de&_x_tr_pto=wapp)** *(Google Translate)*
-
-- 4-way comparison with identical scientific query
-- Quantitative metrics: output length, sources, costs, duration
-- Quality review by competing AIs
-- 16-agent fact-check protocol for hallucinations
 
 **TL;DR:** Lutum delivered 103k characters with 90 sources for $0.19. ChatGPT: 12k chars, 25 sources, fabricated citations. Gemini: 24k chars, data minimization detected. Perplexity: 21k chars, $20/mo subscription.
 
