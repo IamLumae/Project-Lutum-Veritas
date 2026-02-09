@@ -14,11 +14,28 @@ import re
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import requests
 
 from lutum.core.log_config import get_logger
+
 logger = get_logger("lutum.deep_question_pipeline")
+
+
+def _get_proxy_config() -> Optional[str]:
+    """Get proxy configuration from environment variables. Fixes SOCKS proxy URL format."""
+    proxy = os.environ.get("ALL_PROXY") or os.environ.get("all_proxy")
+    if not proxy:
+        proxy = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
+    if not proxy:
+        proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+
+    if proxy and proxy.startswith("socks://"):
+        proxy = proxy.replace("socks://", "socks5://", 1)
+        logger.debug(f"Fixed SOCKS proxy URL: {proxy}")
+
+    return proxy
+
 
 # Model
 MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
@@ -30,6 +47,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # Lutum scrapers path
 LUTUM_ROOT = Path(__file__).parent
 import sys
+
 sys.path.insert(0, str(LUTUM_ROOT))
 
 
@@ -46,24 +64,21 @@ class DeepQuestionPipeline:
         """Make API call to OpenRouter with Gemini 2.5 Flash Lite."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
-        payload = {
-            "model": MODEL,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ]
-        }
+        payload = {"model": MODEL, "messages": [{"role": "user", "content": prompt}]}
 
         # Log request
-        self.flow_log.append({
-            "stage": stage,
-            "type": "request",
-            "timestamp": datetime.now().isoformat(),
-            "prompt": prompt,
-            "model": MODEL
-        })
+        self.flow_log.append(
+            {
+                "stage": stage,
+                "type": "request",
+                "timestamp": datetime.now().isoformat(),
+                "prompt": prompt,
+                "model": MODEL,
+            }
+        )
 
         logger.info(f"[{stage}] Calling OpenRouter...")
 
@@ -72,55 +87,67 @@ class DeepQuestionPipeline:
             "https://openrouter.ai/api/v1/chat/completions",
             headers=headers,
             json=payload,
-            timeout=60
+            timeout=60,
         )
 
         if response.status_code != 200:
-            raise Exception(f"OpenRouter API Error: {response.status_code} - {response.text}")
+            raise Exception(
+                f"OpenRouter API Error: {response.status_code} - {response.text}"
+            )
 
         result = response.json()
         content = result["choices"][0]["message"]["content"]
 
         # Log response
-        self.flow_log.append({
-            "stage": stage,
-            "type": "response",
-            "timestamp": datetime.now().isoformat(),
-            "content": content,
-            "tokens": result.get("usage", {})
-        })
+        self.flow_log.append(
+            {
+                "stage": stage,
+                "type": "response",
+                "timestamp": datetime.now().isoformat(),
+                "content": content,
+                "tokens": result.get("usage", {}),
+            }
+        )
 
         logger.info(f"[{stage}] OK Response received ({len(content)} chars)")
 
         return content
 
-    async def _search_ddg_async(self, query: str, max_results: int = 10) -> List[Dict[str, str]]:
+    async def _search_ddg_async(
+        self, query: str, max_results: int = 10
+    ) -> List[Dict[str, str]]:
         """Search DuckDuckGo and return results (copied from Veritas)."""
         try:
             from ddgs import DDGS
 
-            clean_query = query.strip().replace('"', '').replace("'", '')
+            clean_query = query.strip().replace('"', "").replace("'", "")
 
             loop = asyncio.get_event_loop()
+            proxy = _get_proxy_config()
+
             # Run DDG search in executor (it's sync)
             def search():
-                with DDGS() as ddgs:
-                    return list(ddgs.text(
-                        clean_query,
-                        region="wt-wt",
-                        safesearch="moderate",
-                        max_results=max_results
-                    ))
+                with DDGS(proxy=proxy) as ddgs:
+                    return list(
+                        ddgs.text(
+                            clean_query,
+                            region="wt-wt",
+                            safesearch="moderate",
+                            max_results=max_results,
+                        )
+                    )
 
             results = await loop.run_in_executor(None, search)
 
             formatted = []
             for r in results:
-                formatted.append({
-                    "title": r.get("title", ""),
-                    "url": r.get("href", ""),
-                    "snippet": r.get("body", "")
-                })
+                formatted.append(
+                    {
+                        "title": r.get("title", ""),
+                        "url": r.get("href", ""),
+                        "snippet": r.get("body", ""),
+                    }
+                )
 
             return formatted
 
@@ -128,7 +155,9 @@ class DeepQuestionPipeline:
             logger.error(f"DDG search failed: {clean_query[:30]} - {e}")
             return []
 
-    async def _scrape_single_url_async(self, url: str, index: int, total: int) -> Dict[str, Any]:
+    async def _scrape_single_url_async(
+        self, url: str, index: int, total: int
+    ) -> Dict[str, Any]:
         """
         Scrape single URL with dedicated browser instance.
         Browser opens, scrapes, closes immediately - no RAM leak!
@@ -142,13 +171,15 @@ class DeepQuestionPipeline:
         try:
             # Each URL gets own browser instance
             # Exclude UBO addon - not needed for scraping, and download fails in frozen builds
-            browser = await AsyncCamoufox(headless=True, exclude_addons=[DefaultAddons.UBO]).start()
+            browser = await AsyncCamoufox(
+                headless=True, exclude_addons=[DefaultAddons.UBO]
+            ).start()
             page = await browser.new_page()
 
             await page.goto(
                 url,
                 wait_until="domcontentloaded",
-                timeout=15000  # 15s timeout (shorter for speed)
+                timeout=15000,  # 15s timeout (shorter for speed)
             )
             await asyncio.sleep(1.0)  # Minimal wait for JS
 
@@ -156,28 +187,19 @@ class DeepQuestionPipeline:
 
             if text and len(text.strip()) > 100:
                 logger.info(f"[{index}/{total}] OK: {len(text)} chars")
-                return {
-                    "url": url,
-                    "content": text[:10000],
-                    "success": True
-                }
+                return {"url": url, "content": text[:10000], "success": True}
             else:
                 logger.warning(f"[{index}/{total}] FAIL: Empty content from {url[:60]}")
                 return {
                     "url": url,
                     "content": "",
                     "success": False,
-                    "error": "Empty content"
+                    "error": "Empty content",
                 }
 
         except Exception as e:
             logger.error(f"[{index}/{total}] Scrape FAIL: {url[:40]} - {e}")
-            return {
-                "url": url,
-                "content": "",
-                "success": False,
-                "error": str(e)
-            }
+            return {"url": url, "content": "", "success": False, "error": str(e)}
 
         finally:
             # CRITICAL: Close browser IMMEDIATELY after scraping!
@@ -185,9 +207,13 @@ class DeepQuestionPipeline:
                 try:
                     await asyncio.wait_for(browser.close(), timeout=5.0)
                 except Exception as e:
-                    logger.warning(f"[{index}/{total}] Browser close failed: {str(e)[:30]}")
+                    logger.warning(
+                        f"[{index}/{total}] Browser close failed: {str(e)[:30]}"
+                    )
 
-    async def _search_and_scrape_async(self, queries: List[str], stage: str = "SCRAPE", progress_callback=None) -> List[Dict[str, str]]:
+    async def _search_and_scrape_async(
+        self, queries: List[str], stage: str = "SCRAPE", progress_callback=None
+    ) -> List[Dict[str, str]]:
         """
         Standalone search+scrape with PARALLEL scraping:
         1. DDG Search (get URLs from queries)
@@ -217,7 +243,9 @@ class DeepQuestionPipeline:
                     all_urls.append(url)
                     logger.debug(f"[{i}/{len(queries)}] Found: {url[:60]}...")
                 else:
-                    logger.warning(f"[{i}/{len(queries)}] DDG: No results for '{query[:40]}'")
+                    logger.warning(
+                        f"[{i}/{len(queries)}] DDG: No results for '{query[:40]}'"
+                    )
 
                 # Rate limit
                 if i < len(queries):
@@ -231,7 +259,9 @@ class DeepQuestionPipeline:
                 return []
 
             # Step 2: PARALLEL scrape with separate browser per URL
-            logger.info(f"Step 2: Scraping {len(all_urls)} URLs in PARALLEL (15s timeout each)...")
+            logger.info(
+                f"Step 2: Scraping {len(all_urls)} URLs in PARALLEL (15s timeout each)..."
+            )
 
             # Create scraping tasks (each with own browser)
             if progress_callback:
@@ -248,42 +278,48 @@ class DeepQuestionPipeline:
                     return result
 
                 tasks = [
-                    scrape_with_progress(url, i+1, len(all_urls))
+                    scrape_with_progress(url, i + 1, len(all_urls))
                     for i, url in enumerate(all_urls)
                 ]
                 results = await asyncio.gather(*tasks)
             else:
                 # No progress tracking
                 tasks = [
-                    self._scrape_single_url_async(url, i+1, len(all_urls))
+                    self._scrape_single_url_async(url, i + 1, len(all_urls))
                     for i, url in enumerate(all_urls)
                 ]
                 results = await asyncio.gather(*tasks)
 
-            logger.info(f"Step 2 Done: {sum(1 for r in results if r['success'])}/{len(results)} successful")
+            logger.info(
+                f"Step 2 Done: {sum(1 for r in results if r['success'])}/{len(results)} successful"
+            )
 
             # Log
-            self.flow_log.append({
-                "stage": stage,
-                "type": "scraping",
-                "timestamp": datetime.now().isoformat(),
-                "queries": queries,
-                "urls": all_urls,
-                "results": results,
-                "success_count": sum(1 for r in results if r["success"])
-            })
+            self.flow_log.append(
+                {
+                    "stage": stage,
+                    "type": "scraping",
+                    "timestamp": datetime.now().isoformat(),
+                    "queries": queries,
+                    "urls": all_urls,
+                    "results": results,
+                    "success_count": sum(1 for r in results if r["success"]),
+                }
+            )
 
             return results
 
         except Exception as e:
             logger.error(f"Search+Scrape FAILED: {str(e)}")
-            self.flow_log.append({
-                "stage": stage,
-                "type": "scraping",
-                "timestamp": datetime.now().isoformat(),
-                "queries": queries,
-                "error": str(e)
-            })
+            self.flow_log.append(
+                {
+                    "stage": stage,
+                    "type": "scraping",
+                    "timestamp": datetime.now().isoformat(),
+                    "queries": queries,
+                    "error": str(e),
+                }
+            )
             return []
 
     def _scrape_sources(self, queries: List[str], stage: str) -> List[Dict[str, str]]:
@@ -291,7 +327,9 @@ class DeepQuestionPipeline:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            results = loop.run_until_complete(self._search_and_scrape_async(queries, stage))
+            results = loop.run_until_complete(
+                self._search_and_scrape_async(queries, stage)
+            )
             return results
         finally:
             loop.close()
@@ -307,16 +345,18 @@ class DeepQuestionPipeline:
           Query 1: something
           Query 2: something else
         """
-        lines = text.strip().split('\n')
+        lines = text.strip().split("\n")
         items = []
 
         for line in lines:
             line = line.strip()
 
             # Match patterns like "1.", "1:", "Query 1:", etc.
-            if re.match(r'^\d+[\.:)]', line) or re.match(r'^(Query|Suche|Search)\s+\d+:', line, re.IGNORECASE):
+            if re.match(r"^\d+[\.:)]", line) or re.match(
+                r"^(Query|Suche|Search)\s+\d+:", line, re.IGNORECASE
+            ):
                 # Extract content after number/colon
-                content = re.sub(r'^(\d+[\.:)]|[A-Za-z]+\s+\d+:)\s*', '', line).strip()
+                content = re.sub(r"^(\d+[\.:)]|[A-Za-z]+\s+\d+:)\s*", "", line).strip()
                 if content:
                     items.append(content)
 
@@ -330,16 +370,22 @@ class DeepQuestionPipeline:
         formatted = []
         for i, result in enumerate(results, 1):
             if result.get("success"):
-                formatted.append(f"[{i}] URL: {result.get('url', 'N/A')}\nContent: {result['content'][:2000]}...\n")
+                formatted.append(
+                    f"[{i}] URL: {result.get('url', 'N/A')}\nContent: {result['content'][:2000]}...\n"
+                )
             else:
-                formatted.append(f"[{i}] URL: {result.get('url', 'N/A')}\nError: {result.get('error', 'Unknown')}\n")
+                formatted.append(
+                    f"[{i}] URL: {result.get('url', 'N/A')}\nError: {result.get('error', 'Unknown')}\n"
+                )
 
         return "\n".join(formatted)
 
     def run(self) -> Dict[str, Any]:
         """Run the complete Deep Question pipeline."""
 
-        logger.info(f"DEEP QUESTION PIPELINE - Query: {self.user_query} - Session: {self.session_id}")
+        logger.info(
+            f"DEEP QUESTION PIPELINE - Query: {self.user_query} - Session: {self.session_id}"
+        )
 
         # =====================================================================
         # C1: Intent Analysis
@@ -530,9 +576,9 @@ REMINDER: Respond in the same language as the user query above. Without exceptio
 
         # Parse verification queries (extract after →)
         verification_queries = []
-        for line in c5_response.split('\n'):
-            if '→' in line:
-                query = line.split('→', 1)[1].strip()
+        for line in c5_response.split("\n"):
+            if "→" in line:
+                query = line.split("→", 1)[1].strip()
                 if query:
                     verification_queries.append(query)
 
@@ -540,12 +586,16 @@ REMINDER: Respond in the same language as the user query above. Without exceptio
             # Fallback: parse as numbered list
             verification_queries = self._parse_numbered_list(c5_response)
 
-        logger.info(f"[Parser] Extracted {len(verification_queries)} verification queries")
+        logger.info(
+            f"[Parser] Extracted {len(verification_queries)} verification queries"
+        )
 
         # =====================================================================
         # SCRAPING PHASE 2: Verification
         # =====================================================================
-        verification_results = self._scrape_sources(verification_queries, "Scraping_Phase_2")
+        verification_results = self._scrape_sources(
+            verification_queries, "Scraping_Phase_2"
+        )
         verification_formatted = self._format_scraped_results(verification_results)
 
         # =====================================================================
@@ -602,12 +652,14 @@ REMINDER: Respond in the same language as the user query above. The "Validated: 
 
 {c6_response}"""
 
-        self.flow_log.append({
-            "stage": "Final_Response",
-            "type": "output",
-            "timestamp": datetime.now().isoformat(),
-            "content": final_response
-        })
+        self.flow_log.append(
+            {
+                "stage": "Final_Response",
+                "type": "output",
+                "timestamp": datetime.now().isoformat(),
+                "content": final_response,
+            }
+        )
 
         # Save flow log
         log_path = self._save_flow_log()
@@ -625,22 +677,27 @@ REMINDER: Respond in the same language as the user query above. The "Validated: 
                 "c3_queries": c3_response,
                 "c4_answer": c4_response,
                 "c5_audit": c5_response,
-                "c6_verification": c6_response
-            }
+                "c6_verification": c6_response,
+            },
         }
 
     def _save_flow_log(self) -> Path:
         """Save complete flow log as JSON."""
         output_file = OUTPUT_DIR / f"deep_question_{self.session_id}.json"
 
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump({
-                "session_id": self.session_id,
-                "user_query": self.user_query,
-                "timestamp": datetime.now().isoformat(),
-                "model": MODEL,
-                "flow": self.flow_log
-            }, f, ensure_ascii=False, indent=2)
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "session_id": self.session_id,
+                    "user_query": self.user_query,
+                    "timestamp": datetime.now().isoformat(),
+                    "model": MODEL,
+                    "flow": self.flow_log,
+                },
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
 
         return output_file
 
@@ -650,13 +707,17 @@ if __name__ == "__main__":
     test_queries = [
         "Hat Adolf Hitler sich selbst erschossen?",
         "War die Corona Impfung Betrug?",
-        "Gehört Taiwan zu China?"
+        "Gehört Taiwan zu China?",
     ]
 
     print(f"DEEP QUESTION PIPELINE - BATCH TEST RUN ({len(test_queries)} queries)")
 
     for i, query in enumerate(test_queries, 1):
         print(f"\n# QUERY {i}/{len(test_queries)}")
-        pipeline = DeepQuestionPipeline(query, api_key=os.environ.get("OPENROUTER_API_KEY", ""))
+        pipeline = DeepQuestionPipeline(
+            query, api_key=os.environ.get("OPENROUTER_API_KEY", "")
+        )
         result = pipeline.run()
-        print(f"[RESULT {i}] Session: {result['session_id']} Log: {result['flow_log_path']}")
+        print(
+            f"[RESULT {i}] Session: {result['session_id']} Log: {result['flow_log_path']}"
+        )
