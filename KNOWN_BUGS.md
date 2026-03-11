@@ -9,6 +9,14 @@
 
 ---
 
+### Export Crash in Browser Mode (`invoke` TypeError)
+**Status:** Fixed in master
+**Description:** When using the app via browser (`localhost:8420`) instead of the desktop app, clicking MD or PDF export crashed with `TypeError: Cannot read properties of undefined (reading 'invoke')`. Root cause: both export handlers called Tauri-only APIs (`@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-fs`) which are unavailable in browser context.
+**Fix:** Added `isTauri()` detection via `window.__TAURI_INTERNALS__`. Desktop app uses Tauri save dialog as before. Browser falls back to `URL.createObjectURL` + `<a download>`.
+**Files:** `lutum-desktop/src/components/Chat.tsx`
+
+---
+
 ### Deep Research Session Recovery
 **Status:** Open
 **Description:** When closing the app mid-research and reopening, the "Resume Session" button appears with message "🔄 Session found: X/Y dossiers complete. Resuming..." but the pipeline does not actually resume - nothing happens.
