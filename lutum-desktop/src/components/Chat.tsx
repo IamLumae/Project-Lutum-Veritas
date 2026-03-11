@@ -31,10 +31,29 @@ import {
   saveAskSessions,
   createAskSession,
 } from "../stores/askSessions";
-import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile, writeFile } from "@tauri-apps/plugin-fs";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+
+// Tauri APIs are only available in the desktop app, not in browser mode
+const isTauri = (): boolean => typeof (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== 'undefined';
+
+// Lazily import Tauri dialog only when running inside the desktop app
+async function tauriSave(opts: { filters: { name: string; extensions: string[] }[]; defaultPath: string }): Promise<string | null> {
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  return save(opts);
+}
+
+// Browser fallback: trigger a file download via <a download>
+function browserDownload(content: Uint8Array | string, filename: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export function Chat() {
   // Sessions State
@@ -190,14 +209,18 @@ export function Chat() {
     );
 
     try {
-      // Tauri Save Dialog
-      const filePath = await save({
-        filters: [{ name: 'Markdown', extensions: ['md'] }],
-        defaultPath: `${activeSession.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_synthesis.md`
-      });
-
-      if (filePath) {
-        await writeTextFile(filePath, finalMsg.content);
+      const filename = `${activeSession.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_synthesis.md`;
+      if (isTauri()) {
+        const filePath = await tauriSave({
+          filters: [{ name: 'Markdown', extensions: ['md'] }],
+          defaultPath: filename
+        });
+        if (filePath) {
+          await writeTextFile(filePath, finalMsg.content);
+          alert(t('mdExportSuccess', language));
+        }
+      } else {
+        browserDownload(finalMsg.content, filename, 'text/markdown');
         alert(t('mdExportSuccess', language));
       }
     } catch (err) {
@@ -231,13 +254,15 @@ export function Chat() {
     );
 
     try {
-      // Tauri Save Dialog
-      const filePath = await save({
-        filters: [{ name: 'PDF', extensions: ['pdf'] }],
-        defaultPath: `${activeSession.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_synthesis.pdf`
-      });
-
-      if (!filePath) return;
+      const filename = `${activeSession.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_synthesis.pdf`;
+      let filePath: string | null = null;
+      if (isTauri()) {
+        filePath = await tauriSave({
+          filters: [{ name: 'PDF', extensions: ['pdf'] }],
+          defaultPath: filename
+        });
+        if (!filePath) return;
+      }
 
       // Create PDF with jsPDF
       const doc = new jsPDF({
@@ -465,7 +490,11 @@ export function Chat() {
       const pdfArrayBuffer = doc.output('arraybuffer');
       const uint8Array = new Uint8Array(pdfArrayBuffer);
 
-      await writeFile(filePath, uint8Array);
+      if (isTauri() && filePath) {
+        await writeFile(filePath, uint8Array);
+      } else {
+        browserDownload(uint8Array, filename, 'application/pdf');
+      }
       alert(t('pdfExportSuccess', language));
     } catch (err) {
       alert(t('pdfExportFailed', language) + err);
