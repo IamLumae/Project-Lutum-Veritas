@@ -11,9 +11,11 @@ No browser needed, stable, fast.
 """
 
 import asyncio
+import os
 import requests
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
 
 from lutum.core.log_config import get_logger
 from lutum.core.api_config import get_work_model
@@ -22,7 +24,34 @@ from lutum.core.llm_client import call_chat_completion
 logger = get_logger(__name__)
 
 
+def _get_proxy_config() -> Optional[str]:
+    """
+    Get proxy configuration from environment variables.
+    Fixes SOCKS proxy URL format for httpx compatibility.
+
+    Returns:
+        Proxy URL string or None
+    """
+    # Check common proxy environment variables
+    proxy = os.environ.get("ALL_PROXY") or os.environ.get("all_proxy")
+    if not proxy:
+        proxy = os.environ.get("HTTP_PROXY") or os.environ.get("http_proxy")
+    if not proxy:
+        proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
+
+    if proxy:
+        # Fix socks:// to socks5:// for httpx compatibility
+        if proxy.startswith("socks://"):
+            proxy = proxy.replace("socks://", "socks5://", 1)
+            logger.debug(f"Fixed SOCKS proxy URL: {proxy}")
+        elif proxy.startswith("socks4://") or proxy.startswith("socks5://"):
+            pass  # Already correct format
+
+    return proxy
+
+
 # === SEARCH ENGINE ===
+
 
 def _search_ddg_sync(query: str, max_results: int = 20) -> list[dict]:
     """
@@ -40,26 +69,31 @@ def _search_ddg_sync(query: str, max_results: int = 20) -> list[dict]:
         from ddgs import DDGS
 
         # Clean query - no quotes, they confuse DDG
-        clean_query = query.strip().replace('"', '').replace("'", '')
+        clean_query = query.strip().replace('"', "").replace("'", "")
         logger.debug(f"DDG search: {clean_query[:40]}...")
 
         # Execute search with new ddgs API
-        with DDGS() as ddgs:
-            results = list(ddgs.text(
-                clean_query,  # Positional argument, not keyword!
-                region="wt-wt",  # Worldwide
-                safesearch="moderate",
-                max_results=max_results
-            ))
+        proxy = _get_proxy_config()
+        with DDGS(proxy=proxy) as ddgs:
+            results = list(
+                ddgs.text(
+                    clean_query,  # Positional argument, not keyword!
+                    region="wt-wt",  # Worldwide
+                    safesearch="moderate",
+                    max_results=max_results,
+                )
+            )
 
         # Convert to our format
         formatted = []
         for r in results:
-            formatted.append({
-                "title": r.get("title", ""),
-                "url": r.get("href", ""),
-                "snippet": r.get("body", "")
-            })
+            formatted.append(
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("href", ""),
+                    "snippet": r.get("body", ""),
+                }
+            )
 
         logger.info(f"DDG '{clean_query[:30]}...': {len(formatted)} results")
         return formatted
@@ -75,7 +109,9 @@ async def _search_ddg_async(query: str, max_results: int = 20) -> list[dict]:
     return await loop.run_in_executor(None, _search_ddg_sync, query, max_results)
 
 
-async def _execute_all_searches_async(queries: list[str], results_per_query: int = 20) -> dict[str, list[dict]]:
+async def _execute_all_searches_async(
+    queries: list[str], results_per_query: int = 20
+) -> dict[str, list[dict]]:
     """
     Executes all queries on DDG.
 
@@ -108,7 +144,9 @@ async def _execute_all_searches_async(queries: list[str], results_per_query: int
 
     total_results = sum(len(r) for r in all_results.values())
     duration = search_time.time() - start_time
-    logger.info(f"DDG SEARCH COMPLETE: {total_results} results from {len(queries)} queries in {duration:.1f}s")
+    logger.info(
+        f"DDG SEARCH COMPLETE: {total_results} results from {len(queries)} queries in {duration:.1f}s"
+    )
 
     return all_results
 
@@ -116,11 +154,14 @@ async def _execute_all_searches_async(queries: list[str], results_per_query: int
 # Legacy function - called by research.py
 async def _close_google_session():
     """Legacy - no longer needed as no browser is used."""
-    logger.debug("_close_google_session called (no-op, using duckduckgo-search library)")
+    logger.debug(
+        "_close_google_session called (no-op, using duckduckgo-search library)"
+    )
     pass
 
 
 # === CONFIG ===
+
 
 def _format_results_for_llm(search_results: dict[str, list[dict]]) -> str:
     """
@@ -244,7 +285,7 @@ def _call_llm_pick_urls(
     user_message: str,
     search_results: str,
     previous_learnings: list[str] | None = None,
-    max_tokens: int = 1500
+    max_tokens: int = 1500,
 ) -> Optional[str]:
     """
     LLM selects best URLs from search results (Query-Aware + Context).
@@ -275,22 +316,24 @@ IMPORTANT: Select URLs that provide NEW information, not the same again!
     user_prompt = PICK_URLS_USER_PROMPT.format(
         user_message=user_message,
         search_results=search_results,
-        context_block=context_block
+        context_block=context_block,
     )
 
     # DEBUG: Log FULL prompts sent to LLM
     logger.info(f"[SEARCH] ===== SYSTEM PROMPT =====\n{PICK_URLS_SYSTEM_PROMPT}")
-    logger.info(f"[SEARCH] ===== USER PROMPT (first 3000 chars) =====\n{user_prompt[:3000]}")
+    logger.info(
+        f"[SEARCH] ===== USER PROMPT (first 3000 chars) =====\n{user_prompt[:3000]}"
+    )
     logger.info(f"[SEARCH] ===== USER PROMPT LENGTH: {len(user_prompt)} chars =====")
 
     result = call_chat_completion(
         messages=[
             {"role": "system", "content": PICK_URLS_SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ],
         model=get_work_model(),
         max_tokens=max_tokens,
-        timeout=60
+        timeout=60,
     )
 
     if result.error:
@@ -320,6 +363,7 @@ def _parse_urls(response: str) -> list[str]:
         List of URLs (deduplicated, max 10)
     """
     import re
+
     logger.debug("Parsing URLs from LLM response")
     logger.debug(f"Response preview: {response[:200]}...")
 
@@ -333,7 +377,7 @@ def _parse_urls(response: str) -> list[str]:
 
         for url in matches:
             # Clean URL (sometimes garbage hangs on)
-            url = url.rstrip('.,;:!?')
+            url = url.rstrip(".,;:!?")
             if url not in seen and len(urls) < 10:
                 urls.append(url)
                 seen.add(url)
@@ -349,9 +393,7 @@ def _parse_urls(response: str) -> list[str]:
 
 
 async def get_initial_data(
-    user_message: str,
-    queries: list[str],
-    previous_learnings: list[str] | None = None
+    user_message: str, queries: list[str], previous_learnings: list[str] | None = None
 ) -> dict:
     """
     Step 2: Searches queries and LLM selects best URLs (async, Query-Aware).
@@ -372,7 +414,9 @@ async def get_initial_data(
 
     try:
         # Execute searches (async) - 20 results per query for ~50-100 total
-        search_results = await _execute_all_searches_async(queries, results_per_query=20)
+        search_results = await _execute_all_searches_async(
+            queries, results_per_query=20
+        )
 
         if not search_results or all(len(r) == 0 for r in search_results.values()):
             logger.warning("No search results found")
@@ -380,25 +424,31 @@ async def get_initial_data(
                 "urls_picked": [],
                 "search_results_raw": {},
                 "llm_response": None,
-                "error": "No search results found"
+                "error": "No search results found",
             }
 
         # Format for LLM
         formatted_results = _format_results_for_llm(search_results)
 
         # DEBUG: Log what we're sending to LLM
-        logger.info(f"[SEARCH] Formatted results length: {len(formatted_results)} chars")
-        logger.info(f"[SEARCH] First 2000 chars of search results:\n{formatted_results[:2000]}")
+        logger.info(
+            f"[SEARCH] Formatted results length: {len(formatted_results)} chars"
+        )
+        logger.info(
+            f"[SEARCH] First 2000 chars of search results:\n{formatted_results[:2000]}"
+        )
 
         # LLM picks URLs (with context if available)
-        llm_response = _call_llm_pick_urls(user_message, formatted_results, previous_learnings)
+        llm_response = _call_llm_pick_urls(
+            user_message, formatted_results, previous_learnings
+        )
 
         if not llm_response:
             return {
                 "urls_picked": [],
                 "search_results_raw": search_results,
                 "llm_response": None,
-                "error": "LLM call failed"
+                "error": "LLM call failed",
             }
 
         # Parse URLs
@@ -410,7 +460,7 @@ async def get_initial_data(
             "urls_picked": urls,
             "search_results_raw": search_results,
             "llm_response": llm_response,
-            "error": None
+            "error": None,
         }
 
     except Exception as e:
@@ -419,7 +469,7 @@ async def get_initial_data(
             "urls_picked": [],
             "search_results_raw": {},
             "llm_response": None,
-            "error": str(e)
+            "error": str(e),
         }
 
 

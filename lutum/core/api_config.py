@@ -40,6 +40,10 @@ PROVIDER_CONFIG = {
         "name": "HuggingFace",
         "base_url": "https://api-inference.huggingface.co/v1/chat/completions",
     },
+    "siliconflow": {
+        "name": "SiliconFlow",
+        "base_url": "https://api.siliconflow.com/v1/chat/completions",
+    },
 }
 
 
@@ -54,7 +58,7 @@ def set_api_config(
     provider: str = "openrouter",
     work_model: str | None = None,
     final_model: str | None = None,
-    base_url: str | None = None
+    base_url: str | None = None,
 ) -> None:
     """Setzt API Konfiguration (Provider, Models, Base URL)."""
     global _OPENROUTER_API_KEY, _PROVIDER, _BASE_URL, _WORK_MODEL, _FINAL_MODEL

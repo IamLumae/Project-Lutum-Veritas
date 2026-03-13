@@ -9,7 +9,7 @@ const STORAGE_KEY = "lutum-settings";
 
 import type { Language } from '../i18n/translations';
 
-export type Provider = 'openrouter' | 'openai' | 'anthropic' | 'google' | 'huggingface';
+export type Provider = 'openrouter' | 'openai' | 'anthropic' | 'google' | 'huggingface' | 'siliconflow';
 
 export const PROVIDER_CONFIG: Record<Provider, { name: string; baseUrl: string; placeholder: string }> = {
   openrouter: {
@@ -36,6 +36,11 @@ export const PROVIDER_CONFIG: Record<Provider, { name: string; baseUrl: string; 
     name: 'HuggingFace',
     baseUrl: 'https://api-inference.huggingface.co/v1/chat/completions',
     placeholder: 'hf_...'
+  },
+  siliconflow: {
+    name: 'SiliconFlow',
+    baseUrl: 'https://api.siliconflow.com/v1/chat/completions',
+    placeholder: 'sk-...'
   },
 };
 
