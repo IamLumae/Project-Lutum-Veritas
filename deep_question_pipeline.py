@@ -129,7 +129,7 @@ class DeepQuestionPipeline:
             loop = asyncio.get_event_loop()
             # Run DDG search in executor (it's sync)
             def search():
-                with DDGS() as ddgs:
+                with DDGS(timeout=10) as ddgs:
                     return list(ddgs.text(
                         clean_query,
                         region="wt-wt",
@@ -137,7 +137,9 @@ class DeepQuestionPipeline:
                         max_results=max_results
                     ))
 
-            results = await loop.run_in_executor(None, search)
+            # Hartes Timeout: ddgs rotiert bei Rate-Limit intern Backends und kann den
+            # Executor-Thread minutenlang halten (02.07.: Phase 2 hing >6 min, Turn starb)
+            results = await asyncio.wait_for(loop.run_in_executor(None, search), timeout=15)
 
             formatted = []
             for r in results:
@@ -224,7 +226,7 @@ class DeepQuestionPipeline:
         logger.info(f"[{index}/{total}] Remote scraping: {url[:60]}...")
 
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=20) as client:
                 resp = await client.post(
                     f"{remote_url}/scrape",
                     json={"url": url, "timeout": 15},
@@ -268,17 +270,24 @@ class DeepQuestionPipeline:
             # Step 1: Search all queries on DDG
             logger.info(f"Step 1: Searching DDG for {len(queries)} queries...")
             all_urls = []
+            ddg_fails = 0
             for i, query in enumerate(queries, 1):
                 logger.debug(f"[{i}/{len(queries)}] DDG: {query[:50]}...")
                 results = await self._search_ddg_async(query, max_results=3)
 
                 # Take first URL from results
                 if results and len(results) > 0:
+                    ddg_fails = 0
                     url = results[0]["url"]
                     all_urls.append(url)
                     logger.debug(f"[{i}/{len(queries)}] Found: {url[:60]}...")
                 else:
+                    ddg_fails += 1
                     logger.warning(f"[{i}/{len(queries)}] DDG: No results for '{query[:40]}'")
+                    if ddg_fails >= 3:
+                        logger.warning(f"[{stage}] DDG 3x in Folge leer/Timeout -> Rate-Limit angenommen, "
+                                       f"{len(queries) - i} restliche Queries uebersprungen")
+                        break
 
                 # Rate limit
                 if i < len(queries):
@@ -294,9 +303,9 @@ class DeepQuestionPipeline:
             # Step 2: Scrape — Cache-Reuse, max. 3 parallel, 1x Retry bei leerem Ergebnis.
             # Der Remote-Scraper liefert unter voller 10er-Parallel-Last leere Antworten
             # (belegt 02.07.: PMC-URL Phase 1 = 30k chars, Phase 2 = "Empty content").
-            logger.info(f"Step 2: Scraping {len(all_urls)} URLs (max 3 parallel, retry-on-empty)...")
+            logger.info(f"Step 2: Scraping {len(all_urls)} URLs (max 4 parallel, retry-on-empty)...")
 
-            sem = asyncio.Semaphore(3)
+            sem = asyncio.Semaphore(4)
             completed = 0
 
             async def scrape_one(url, index, total):
@@ -309,7 +318,7 @@ class DeepQuestionPipeline:
                     async with sem:
                         result = await self._scrape_single_url_async(url, index, total)
                         if not result["success"]:
-                            await asyncio.sleep(1.5)
+                            await asyncio.sleep(1.0)
                             logger.info(f"[{index}/{total}] Retry nach leerem Ergebnis: {url[:60]}")
                             result = await self._scrape_single_url_async(url, index, total)
                     if result["success"]:
