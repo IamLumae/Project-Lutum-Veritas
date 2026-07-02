@@ -21,7 +21,10 @@ from lutum.core.log_config import get_logger
 logger = get_logger("lutum.deep_question_pipeline")
 
 # Model
-MODEL = "google/gemini-2.5-flash-lite-preview-09-2025"
+# 02.07.26: 2.5-flash-lite-preview-09-2025 -> 3.1-flash-lite (GA statt Preview-Abschalt-Risiko;
+# staerker in Legal/Health/Finance-Rankings). Thinking wird in _call_openrouter auf "low" gepinnt,
+# sonst fressen Reasoning-Tokens den Output-Preis.
+MODEL = "google/gemini-3.1-flash-lite"
 
 # Output directory
 OUTPUT_DIR = Path(__file__).parent / "deep_question_runs"
@@ -36,9 +39,10 @@ sys.path.insert(0, str(LUTUM_ROOT))
 class DeepQuestionPipeline:
     """Complete Deep Question pipeline with 6-stage verification."""
 
-    def __init__(self, user_query: str, api_key: str):
+    def __init__(self, user_query: str, api_key: str, model: str = None):
         self.user_query = user_query
         self.api_key = api_key
+        self.model = model or MODEL
         self.flow_log = []
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -50,11 +54,15 @@ class DeepQuestionPipeline:
         }
 
         payload = {
-            "model": MODEL,
+            "model": self.model,
             "messages": [
                 {"role": "user", "content": prompt}
             ]
         }
+        # Gemini 3.x: Thinking ist default AN — auf "low" pinnen (Reasoning-Tokens zaehlen als
+        # Output). Nur fuer 3.x setzen; andere Modelle (z.B. UNCENSORED_MODEL) bleiben unberuehrt.
+        if self.model.startswith("google/gemini-3"):
+            payload["reasoning"] = {"effort": "low"}
 
         # Log request
         self.flow_log.append({
@@ -62,24 +70,37 @@ class DeepQuestionPipeline:
             "type": "request",
             "timestamp": datetime.now().isoformat(),
             "prompt": prompt,
-            "model": MODEL
+            "model": self.model
         })
 
         logger.info(f"[{stage}] Calling OpenRouter...")
 
-        # Make request
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
-
-        if response.status_code != 200:
-            raise Exception(f"OpenRouter API Error: {response.status_code} - {response.text}")
-
-        result = response.json()
-        content = result["choices"][0]["message"]["content"]
+        # Haertung 02.07.26: Gemini bricht selten mid-output ab (RECITATION/MAX_TOKENS) und liefert
+        # dann ein stilles Text-Fragment mit leerer usage (gesehen: C6 mit 152 chars, 0in/0out —
+        # landete abgeschnitten im Discord-Embed). Abnormaler Abschluss -> EIN Retry, dann Exception
+        # statt stilles Fragment.
+        content, finish, usage = "", None, {}
+        for attempt in (1, 2):
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            if response.status_code != 200:
+                raise Exception(f"OpenRouter API Error: {response.status_code} - {response.text}")
+            result = response.json()
+            choice = result["choices"][0]
+            content = choice["message"]["content"] or ""
+            finish = (choice.get("finish_reason") or choice.get("native_finish_reason") or "").lower()
+            usage = result.get("usage") or {}
+            ok = bool(content.strip()) and finish in ("stop", "end_turn", "")
+            if ok:
+                break
+            logger.warning(f"[{stage}] Abnormaler Abschluss (finish={finish!r}, {len(content)} chars, "
+                           f"usage={usage}) — Versuch {attempt}/2")
+        else:
+            raise Exception(f"[{stage}] Antwort nach 2 Versuchen abgebrochen/leer (finish={finish!r})")
 
         # Log response
         self.flow_log.append({
@@ -87,10 +108,11 @@ class DeepQuestionPipeline:
             "type": "response",
             "timestamp": datetime.now().isoformat(),
             "content": content,
-            "tokens": result.get("usage", {})
+            "finish_reason": finish,
+            "tokens": usage
         })
 
-        logger.info(f"[{stage}] OK Response received ({len(content)} chars)")
+        logger.info(f"[{stage}] OK Response received ({len(content)} chars, finish={finish})")
 
         return content
 
@@ -125,14 +147,19 @@ class DeepQuestionPipeline:
             return formatted
 
         except Exception as e:
-            logger.error(f"DDG search failed: {clean_query[:30]} - {e}")
+            logger.error(f"DDG search failed: {query[:30]} - {e}")
             return []
 
     async def _scrape_single_url_async(self, url: str, index: int, total: int) -> Dict[str, Any]:
         """
-        Scrape single URL with dedicated browser instance.
-        Browser opens, scrapes, closes immediately - no RAM leak!
+        Scrape single URL. Uses remote scraper if CAMOUFOX_REMOTE_URL is set,
+        otherwise local Camoufox with dedicated browser instance.
         """
+        # Remote scraper: delegate to HTTP service
+        remote_url = os.environ.get("CAMOUFOX_REMOTE_URL", "")
+        if remote_url:
+            return await self._scrape_via_remote(url, remote_url, index, total)
+
         from camoufox.async_api import AsyncCamoufox
         from camoufox import DefaultAddons
 
@@ -158,7 +185,7 @@ class DeepQuestionPipeline:
                 logger.info(f"[{index}/{total}] OK: {len(text)} chars")
                 return {
                     "url": url,
-                    "content": text[:10000],
+                    "content": text[:30000],
                     "success": True
                 }
             else:
@@ -187,6 +214,39 @@ class DeepQuestionPipeline:
                 except Exception as e:
                     logger.warning(f"[{index}/{total}] Browser close failed: {str(e)[:30]}")
 
+    async def _scrape_via_remote(self, url: str, remote_url: str, index: int, total: int) -> Dict[str, Any]:
+        """Scrape via remote Camoufox HTTP service."""
+        import httpx
+        api_key = os.environ.get("CAMOUFOX_API_KEY", "")
+        logger.info(f"[{index}/{total}] Remote scraping: {url[:60]}...")
+
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(
+                    f"{remote_url}/scrape",
+                    json={"url": url, "timeout": 15},
+                    headers={"X-API-Key": api_key} if api_key else {},
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    text = data.get("text", "")
+                    if text and len(text.strip()) > 100:
+                        logger.info(f"[{index}/{total}] Remote OK: {len(text)} chars")
+                        return {
+                            "url": url,
+                            "content": text[:30000],
+                            "success": True
+                        }
+                    else:
+                        logger.warning(f"[{index}/{total}] Remote EMPTY: {url[:60]}")
+                        return {"url": url, "content": "", "success": False, "error": "Empty content"}
+                else:
+                    logger.warning(f"[{index}/{total}] Remote HTTP {resp.status_code}")
+                    return {"url": url, "content": "", "success": False, "error": f"HTTP {resp.status_code}"}
+        except Exception as e:
+            logger.error(f"[{index}/{total}] Remote FAIL: {e}")
+            return {"url": url, "content": "", "success": False, "error": str(e)}
+
     async def _search_and_scrape_async(self, queries: List[str], stage: str = "SCRAPE", progress_callback=None) -> List[Dict[str, str]]:
         """
         Standalone search+scrape with PARALLEL scraping:
@@ -202,8 +262,6 @@ class DeepQuestionPipeline:
         logger.info(f"[{stage}] DDG Search + PARALLEL Camoufox Scrape...")
 
         try:
-            from camoufox.async_api import AsyncCamoufox
-
             # Step 1: Search all queries on DDG
             logger.info(f"Step 1: Searching DDG for {len(queries)} queries...")
             all_urls = []
@@ -330,7 +388,7 @@ class DeepQuestionPipeline:
         formatted = []
         for i, result in enumerate(results, 1):
             if result.get("success"):
-                formatted.append(f"[{i}] URL: {result.get('url', 'N/A')}\nContent: {result['content'][:2000]}...\n")
+                formatted.append(f"[{i}] URL: {result.get('url', 'N/A')}\nContent: {result['content'][:5000]}...\n")
             else:
                 formatted.append(f"[{i}] URL: {result.get('url', 'N/A')}\nError: {result.get('error', 'Unknown')}\n")
 
