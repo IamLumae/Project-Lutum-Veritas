@@ -394,10 +394,26 @@ class DeepQuestionPipeline:
 
         return "\n".join(formatted)
 
-    def run(self) -> Dict[str, Any]:
-        """Run the complete Deep Question pipeline."""
+    # 8 Pipeline-Stufen (fuer Live-Progress-Anzeige, deckungsgleich mit den Discord-Embed-Stufen)
+    STAGES = ["Intent-Analyse", "Wissensbedarf", "Suchanfragen", "Recherche Phase 1",
+              "Antwort-Synthese", "Claim-Audit", "Recherche Phase 2", "Verifikation"]
+
+    def run(self, progress_cb=None) -> Dict[str, Any]:
+        """Run the complete Deep Question pipeline.
+
+        progress_cb(idx:int, total:int, stage:str, detail:str, sources:int) — optional, wird an
+        jeder der 8 Stufengrenzen aufgerufen (fuer eine Live-Fortschrittsanzeige im Webchat/Embed).
+        """
+        _total = len(self.STAGES)
+        def _pcb(idx: int, detail: str = "", sources: int = 0):
+            if progress_cb:
+                try:
+                    progress_cb(idx, _total, self.STAGES[idx], detail, sources)
+                except Exception:
+                    pass   # Progress darf die Pipeline NIE stoeren
 
         logger.info(f"DEEP QUESTION PIPELINE - Query: {self.user_query} - Session: {self.session_id}")
+        _pcb(0)
 
         # =====================================================================
         # C1: Intent Analysis
@@ -456,6 +472,7 @@ Remember: Your training data is irrelevant. Only assess what information is NEED
 
 REMINDER: Respond in the same language as the user query above. Without exception."""
 
+        _pcb(1)
         c2_response = self._call_openrouter(c2_prompt, "C2_Knowledge_Requirements")
 
         # =====================================================================
@@ -496,6 +513,7 @@ The last 5 queries should diversify or verify the information.
 
 REMINDER: Respond in the same language as the user query above. Without exception."""
 
+        _pcb(2)
         c3_response = self._call_openrouter(c3_prompt, "C3_Search_Queries")
 
         # Parse search queries
@@ -505,8 +523,10 @@ REMINDER: Respond in the same language as the user query above. Without exceptio
         # =====================================================================
         # SCRAPING PHASE 1: Main Research
         # =====================================================================
+        _pcb(3, f"{len(search_queries)} Suchanfragen")
         scraped_results = self._scrape_sources(search_queries, "Scraping_Phase_1")
         scraped_formatted = self._format_scraped_results(scraped_results)
+        _n1 = sum(1 for r in scraped_results if r.get("success"))
 
         # =====================================================================
         # C4: Answer Synthesis
@@ -547,6 +567,7 @@ Then provide your answer:
 
 REMINDER: Respond in the same language as the user query above. Without exception."""
 
+        _pcb(4, "", _n1)
         c4_response = self._call_openrouter(c4_prompt, "C4_Answer_Synthesis")
 
         # =====================================================================
@@ -584,6 +605,7 @@ Focus on the most important verifiable factual claims.
 
 REMINDER: Respond in the same language as the user query above. Without exception."""
 
+        _pcb(5, "", _n1)
         c5_response = self._call_openrouter(c5_prompt, "C5_Claim_Audit")
 
         # Parse verification queries (extract after →)
@@ -603,8 +625,10 @@ REMINDER: Respond in the same language as the user query above. Without exceptio
         # =====================================================================
         # SCRAPING PHASE 2: Verification
         # =====================================================================
+        _pcb(6, f"{len(verification_queries)} Prueffragen", _n1)
         verification_results = self._scrape_sources(verification_queries, "Scraping_Phase_2")
         verification_formatted = self._format_scraped_results(verification_results)
+        _n2 = sum(1 for r in verification_results if r.get("success"))
 
         # =====================================================================
         # C6: Verification Report
@@ -647,6 +671,7 @@ Use "Validated: No" if significant contradictions were found.
 
 REMINDER: Respond in the same language as the user query above. The "Validated: Yes/No" line must be in English regardless of response language."""
 
+        _pcb(7, "", _n1 + _n2)
         c6_response = self._call_openrouter(c6_prompt, "C6_Verification_Report")
 
         # =====================================================================
