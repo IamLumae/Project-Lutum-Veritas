@@ -45,6 +45,9 @@ class DeepQuestionPipeline:
         self.model = model or MODEL
         self.flow_log = []
         self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # URL -> Volltext aus erfolgreichen Scrapes; Phase 2 verifiziert sonst gegen
+        # leere Re-Scrapes von URLs, deren Inhalt im selben Run schon vorlag
+        self._scrape_cache: Dict[str, str] = {}
 
     def _call_openrouter(self, prompt: str, stage: str) -> str:
         """Make API call to OpenRouter with Gemini 2.5 Flash Lite."""
@@ -181,7 +184,7 @@ class DeepQuestionPipeline:
 
             text = await page.evaluate("document.body?.innerText || ''")
 
-            if text and len(text.strip()) > 100:
+            if text and len(text.strip()) >= 400:  # <400 = Cookie-Wall/Paywall-Stub, kein brauchbarer Quelltext
                 logger.info(f"[{index}/{total}] OK: {len(text)} chars")
                 return {
                     "url": url,
@@ -230,7 +233,7 @@ class DeepQuestionPipeline:
                 if resp.status_code == 200:
                     data = resp.json()
                     text = data.get("text", "")
-                    if text and len(text.strip()) > 100:
+                    if text and len(text.strip()) >= 400:  # <400 = Cookie-Wall/Paywall-Stub, kein brauchbarer Quelltext
                         logger.info(f"[{index}/{total}] Remote OK: {len(text)} chars")
                         return {
                             "url": url,
@@ -281,42 +284,46 @@ class DeepQuestionPipeline:
                 if i < len(queries):
                     await asyncio.sleep(0.3)
 
-            # Limit to exactly 10 URLs
-            all_urls = all_urls[:10]
-            logger.info(f"Step 1 Done: {len(all_urls)} URLs collected (limited to 10)")
+            # Dedup (Reihenfolge stabil) + Limit auf 10 — Phase 2 sammelte sonst dieselbe URL mehrfach
+            all_urls = list(dict.fromkeys(all_urls))[:10]
+            logger.info(f"Step 1 Done: {len(all_urls)} URLs collected (deduped, limited to 10)")
 
             if not all_urls:
                 return []
 
-            # Step 2: PARALLEL scrape with separate browser per URL
-            logger.info(f"Step 2: Scraping {len(all_urls)} URLs in PARALLEL (15s timeout each)...")
+            # Step 2: Scrape — Cache-Reuse, max. 3 parallel, 1x Retry bei leerem Ergebnis.
+            # Der Remote-Scraper liefert unter voller 10er-Parallel-Last leere Antworten
+            # (belegt 02.07.: PMC-URL Phase 1 = 30k chars, Phase 2 = "Empty content").
+            logger.info(f"Step 2: Scraping {len(all_urls)} URLs (max 3 parallel, retry-on-empty)...")
 
-            # Create scraping tasks (each with own browser)
-            if progress_callback:
-                # Track progress as each task completes
-                completed = 0
-                results = []
+            sem = asyncio.Semaphore(3)
+            completed = 0
 
-                async def scrape_with_progress(url, index, total):
-                    nonlocal completed
-                    result = await self._scrape_single_url_async(url, index, total)
-                    completed += 1
-                    if progress_callback:
-                        await progress_callback(completed, total)
-                    return result
+            async def scrape_one(url, index, total):
+                nonlocal completed
+                cached = self._scrape_cache.get(url)
+                if cached:
+                    logger.info(f"[{index}/{total}] Cache-Reuse ({len(cached)} chars): {url[:60]}")
+                    result = {"url": url, "content": cached, "success": True, "cached": True}
+                else:
+                    async with sem:
+                        result = await self._scrape_single_url_async(url, index, total)
+                        if not result["success"]:
+                            await asyncio.sleep(1.5)
+                            logger.info(f"[{index}/{total}] Retry nach leerem Ergebnis: {url[:60]}")
+                            result = await self._scrape_single_url_async(url, index, total)
+                    if result["success"]:
+                        self._scrape_cache[url] = result["content"]
+                completed += 1
+                if progress_callback:
+                    await progress_callback(completed, total)
+                return result
 
-                tasks = [
-                    scrape_with_progress(url, i+1, len(all_urls))
-                    for i, url in enumerate(all_urls)
-                ]
-                results = await asyncio.gather(*tasks)
-            else:
-                # No progress tracking
-                tasks = [
-                    self._scrape_single_url_async(url, i+1, len(all_urls))
-                    for i, url in enumerate(all_urls)
-                ]
-                results = await asyncio.gather(*tasks)
+            tasks = [
+                scrape_one(url, i+1, len(all_urls))
+                for i, url in enumerate(all_urls)
+            ]
+            results = await asyncio.gather(*tasks)
 
             logger.info(f"Step 2 Done: {sum(1 for r in results if r['success'])}/{len(results)} successful")
 
