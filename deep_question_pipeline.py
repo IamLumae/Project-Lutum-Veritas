@@ -677,6 +677,12 @@ REMINDER: Respond in the same language as the user query above. The "Validated: 
             "final_response": final_response,
             "session_id": self.session_id,
             "flow_log_path": str(log_path),
+            # 02.07.26 (additiv): Quellen-URLs beider Scrape-Phasen fuer zitierfaehige Rueckgabe
+            # (veritas_ask_direct fuer die Attias — die brauchen die Links zum O-Ton).
+            "sources": (
+                [r.get("url", "") for r in scraped_results if r.get("success")]
+                + [r.get("url", "") for r in verification_results if r.get("success")]
+            ),
             "stages": {
                 "c1_intent": c1_response,
                 "c2_knowledge": c2_response,
